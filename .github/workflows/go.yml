@@ -18,6 +18,6 @@ jobs:
       - name: Vet
         run: go vet ./...
       - name: Build Gateway (Linux)
-        run: go build -o /tmp/hexveil-gateway ./cmd/gateway
+        run: go build -o /tmp/reinor-gateway ./cmd/gateway
       - name: Build Agent (Windows)
-        run: GOOS=windows GOARCH=amd64 go build -o /tmp/hexveil-agent.exe ./cmd/agent
+        run: GOOS=windows GOARCH=amd64 go build -o /tmp/reinor-agent.exe ./cmd/agent

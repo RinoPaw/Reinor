@@ -1,4 +1,4 @@
-module github.com/RinoPaw/Hexveil
+module github.com/RinoPaw/Reinor
 
 go 1.25.0
 

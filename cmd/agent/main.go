@@ -17,7 +17,7 @@ import (
  "time"
 
  "github.com/coder/websocket"
- "github.com/RinoPaw/Hexveil/internal/wire"
+ "github.com/RinoPaw/Reinor/internal/wire"
 )
 func getToken(path string)string{
  data,err:=os.ReadFile(path);if err!=nil{log.Fatalf("token file: %v",err)}

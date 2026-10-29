@@ -10,7 +10,7 @@ import (
  "testing"
  "time"
 
- "github.com/RinoPaw/Hexveil/internal/trust"
+ "github.com/RinoPaw/Reinor/internal/trust"
 )
 
 func invoke(t *testing.T,at time.Time,args ...string)(string,string,error){

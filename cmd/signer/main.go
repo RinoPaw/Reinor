@@ -17,7 +17,7 @@ import (
  "strings"
  "time"
 
- "github.com/RinoPaw/Hexveil/internal/trust"
+ "github.com/RinoPaw/Reinor/internal/trust"
 )
 
 const version = "0.1.0"

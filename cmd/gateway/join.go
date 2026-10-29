@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"context"
-	"github.com/RinoPaw/Hexveil/internal/wire"
+	"github.com/RinoPaw/Reinor/internal/wire"
 	"github.com/coder/websocket"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"log"

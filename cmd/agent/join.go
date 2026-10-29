@@ -17,7 +17,7 @@ import (
  "time"
 
  "github.com/coder/websocket"
- "github.com/RinoPaw/Hexveil/internal/wire"
+ "github.com/RinoPaw/Reinor/internal/wire"
 )
 
 type joinCredential struct {
