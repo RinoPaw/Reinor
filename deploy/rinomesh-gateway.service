@@ -1,0 +1,29 @@
+[Unit]
+Description=RinoMesh Gateway (WSS + single authenticated MCP)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rinomesh-mcp
+Group=rinomesh-mcp
+WorkingDirectory=/opt/rinomesh-control/mvp
+Environment=RINOMESH_AGENT_TOKEN_FILE=/etc/rinomesh/agent.token
+Environment=RINOMESH_CONTROL_TOKEN_FILE=/etc/rinomesh/control.token
+ExecStart=/opt/rinomesh-control/bin/rinomesh-gateway
+Restart=on-failure
+RestartSec=4s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+LockPersonality=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
