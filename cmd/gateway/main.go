@@ -275,7 +275,7 @@ func (h *hub) serveAgent(w http.ResponseWriter, r *http.Request, token string, j
 		if err != nil {
 			return
 		}
-		if frame.Type == "result" {
+		if frame.Type == "result" || frame.Type == "capture_result" {
 			h.completed(a, frame)
 		}
 	}
