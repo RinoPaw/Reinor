@@ -21,3 +21,5 @@ jobs:
         run: go build -o /tmp/reinor-gateway ./cmd/gateway
       - name: Build Agent (Windows)
         run: GOOS=windows GOARCH=amd64 go build -o /tmp/reinor-agent.exe ./cmd/agent
+      - name: Build Agent (Linux)
+        run: GOOS=linux GOARCH=amd64 go build -o /tmp/reinor-agent-linux ./cmd/agent
