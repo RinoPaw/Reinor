@@ -137,7 +137,7 @@ func noArgs(fs *flag.FlagSet)error{
  return nil
 }
 func usage()string{
- return `RinoMesh Signer `+version+`  (offline owner-key CLI)
+ return `Reinor Signer `+version+`  (offline owner-key CLI)
 Usage:
   rinomesh-signer init [--home DIR]
   rinomesh-signer account [--home DIR]
