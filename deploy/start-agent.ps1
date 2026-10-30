@@ -1,4 +1,4 @@
-# RinoMesh Agent autostart launcher for the signed-in Windows user.
+# Reinor Agent autostart launcher for the signed-in Windows user.
 # Install shortcut to this script in the user's Startup folder.
 $ErrorActionPreference = 'Stop'
 $root = Join-Path $env:LOCALAPPDATA 'RinoMesh'
