@@ -12,6 +12,8 @@ while (($#)); do
 done
 [[ "$sha" =~ ^[A-Fa-f0-9]{64}$ ]] || usage
 root=/opt/rinomesh-control
+# A disposable test root is permitted only for --dry-run validation.
+if ((dry)) && [[ -n "${REINOR_UPDATER_TEST_ROOT:-}" ]]; then root="$REINOR_UPDATER_TEST_ROOT"; fi
 target="$root/bin/rinomesh-gateway"
 stage="$root/updates/rinomesh-gateway"
 tmp="$root/bin/.rinomesh-gateway.pending"
