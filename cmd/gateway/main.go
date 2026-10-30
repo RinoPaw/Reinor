@@ -276,7 +276,7 @@ func main() {
 	mcp.AddTool(m, &mcp.Tool{Name: "list_devices", Description: "List online RinoMesh devices."}, func(ctx context.Context, req *mcp.CallToolRequest, args noArgs) (*mcp.CallToolResult, any, error) {
 		return result(h.list(), false), nil, nil
 	})
-	mcp.AddTool(m, &mcp.Tool{Name: "execute_command", Description: "Run a PowerShell command on an online device. May change files or system state."}, func(ctx context.Context, req *mcp.CallToolRequest, args execArgs) (*mcp.CallToolResult, any, error) {
+	mcp.AddTool(m, &mcp.Tool{Name: "execute_command", Description: "Run a native OS shell command (PowerShell on Windows, /bin/sh on Linux) on an online device. May change files or system state."}, func(ctx context.Context, req *mcp.CallToolRequest, args execArgs) (*mcp.CallToolResult, any, error) {
 		r, err := h.execute(ctx, args.DeviceID, args.Command, 20*time.Second)
 		if err != nil {
 			return result(map[string]string{"error": err.Error()}, true), nil, nil

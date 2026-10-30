@@ -10,7 +10,7 @@ Reinor is a standalone **Model Context Protocol (MCP)** application for managing
 
 - MCP tools and their authorization boundary.
 - Device enrollment / owner approval and online-status tracking.
-- Windows Agent command execution and its authenticated Gateway connection.
+- Windows and Linux Agent command execution and their authenticated Gateway connections.
 - MCP OAuth integration and app-specific tests.
 
 ## What does not belong here
@@ -22,7 +22,7 @@ Reinor is a standalone **Model Context Protocol (MCP)** application for managing
 ## Repository layout
 
 - `cmd/gateway`: authenticated MCP server and device command dispatcher.
-- `cmd/agent`: Windows client and enrollment flow.
+- `cmd/agent`: Windows/Linux client and enrollment flow.
 - `cmd/signer`: experimental device-owner signature CLI.
 - `internal/`: protocol framing, OAuth, registry and trust building blocks.
 - `proto/`: wire protocol.
@@ -38,6 +38,7 @@ go test ./...
 go vet ./...
 go build ./cmd/gateway
 GOOS=windows GOARCH=amd64 go build -o reinor-agent.exe ./cmd/agent
+GOOS=linux GOARCH=amd64 go build -o reinor-agent-linux ./cmd/agent
 ```
 
 `go build ./cmd/gateway` builds a local binary; do not commit it. The project requires no Yggdrasil daemon or kernel networking features to compile or test.
@@ -55,3 +56,4 @@ Keep live enrollment tickets, OAuth tokens, owner credentials and generated conf
 The project was extracted from experiments/rinomesh-mvp in RinoPaw/Rino-Network and maintained as RinoPaw/Hexveil before being named Reinor. The active Go module path is github.com/RinoPaw/Reinor.
 
 This source-only rename retains the existing deployed service names, config, credentials and enrolled-device state. Read docs/rename-compatibility.md before any deployment changes.
+The Linux Agent uses `/bin/sh -c` and has a documented unprivileged systemd deployment in [docs/linux-agent.md](docs/linux-agent.md). The Windows Agent continues using PowerShell.

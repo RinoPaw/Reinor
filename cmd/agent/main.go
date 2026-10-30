@@ -36,6 +36,15 @@ func exitCode(err error)int32{
  if errors.As(err,&e){return int32(e.ExitCode())}
  return -1
 }
+// agentShellCommand selects the native shell for the enrolled device OS.
+// Gateway authentication and command deadlines are enforced by the caller.
+func agentShellCommand(ctx context.Context, command string) *exec.Cmd {
+ if runtime.GOOS == "windows" {
+  return exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command)
+ }
+ return exec.CommandContext(ctx, "/bin/sh", "-c", command)
+}
+
 func execute(f wire.Envelope)wire.Envelope{
  reply:=wire.Envelope{Type:"result",TaskID:f.TaskID}
  if len(f.Command)==0||len(f.Command)>4096{reply.Error="invalid command";return reply}
@@ -43,7 +52,7 @@ func execute(f wire.Envelope)wire.Envelope{
  if ms<1000||ms>20000{ms=20000}
  ctx,cancel:=context.WithTimeout(context.Background(),time.Duration(ms)*time.Millisecond)
  defer cancel()
- cmd:=exec.CommandContext(ctx,"powershell.exe","-NoProfile","-NonInteractive","-Command",f.Command)
+ cmd:=agentShellCommand(ctx,f.Command)
  cmd.WaitDelay=2*time.Second
  var out,errout limitedBuffer
  out.max=65536;errout.max=65536
