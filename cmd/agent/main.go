@@ -18,6 +18,7 @@ import (
 
  "github.com/coder/websocket"
  "github.com/RinoPaw/Reinor/internal/wire"
+ "github.com/RinoPaw/Reinor/internal/desktop"
 )
 func getToken(path string)string{
  data,err:=os.ReadFile(path);if err!=nil{log.Fatalf("token file: %v",err)}
@@ -63,6 +64,21 @@ func execute(f wire.Envelope)wire.Envelope{
  if ctx.Err()!=nil{reply.Error="execution deadline exceeded"}else if err!=nil&&reply.ExitCode==-1{reply.Error=fmt.Sprintf("launch failed: %v",err)}
  return reply
 }
+func captureScreen(f wire.Envelope) wire.Envelope {
+ reply := wire.Envelope{Type:"capture_result", TaskID:f.TaskID}
+ shot,err := desktop.CaptureScreen(int(f.Width),int(f.Quality))
+ if err != nil {reply.Error=err.Error();return reply}
+ reply.Data=shot.Data
+ reply.MIMEType=shot.MIMEType
+ reply.Width=uint32(shot.Width)
+ reply.Height=uint32(shot.Height)
+ reply.OriginX=int32(shot.OriginX)
+ reply.OriginY=int32(shot.OriginY)
+ reply.PhysicalWidth=uint32(shot.PhysicalWidth)
+ reply.PhysicalHeight=uint32(shot.PhysicalHeight)
+ return reply
+}
+
 func session(parent context.Context,url,id,token string)error{
  header:=http.Header{"Authorization":[]string{"Bearer "+token}}
  ctx,stop:=context.WithTimeout(parent,15*time.Second)
@@ -71,7 +87,9 @@ func session(parent context.Context,url,id,token string)error{
  if err!=nil{return err}
  defer c.CloseNow()
  c.SetReadLimit(wire.MaxFrame)
- hello,_:=wire.Marshal(wire.Envelope{Type:"hello",DeviceID:id,OS:runtime.GOOS})
+ capabilities := ""
+ if runtime.GOOS == "windows" { capabilities = "capture_screen/v1" }
+ hello,_:=wire.Marshal(wire.Envelope{Type:"hello",DeviceID:id,OS:runtime.GOOS,Capabilities:capabilities})
  if err:=c.Write(parent,websocket.MessageBinary,hello);err!=nil{return err}
  log.Printf("connected to gateway device=%s",id)
  var writeMu sync.Mutex
@@ -89,12 +107,13 @@ func session(parent context.Context,url,id,token string)error{
   if err!=nil{return err}
   if typ!=websocket.MessageBinary{continue}
   f,err:=wire.Unmarshal(data);if err!=nil{return err}
-  if f.Type!="execute"{continue}
+  if f.Type!="execute" && f.Type!="capture_screen"{continue}
   select{
   case busy<-struct{}{}:
    go func(f wire.Envelope){
     defer func(){<-busy}()
-    reply:=execute(f)
+    var reply wire.Envelope
+    if f.Type=="capture_screen" {reply=captureScreen(f)} else {reply=execute(f)}
     if err:=send(reply);err!=nil{log.Printf("send result: %v",err);_=c.CloseNow()}
    }(f)
   default:
