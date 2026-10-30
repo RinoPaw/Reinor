@@ -4,6 +4,8 @@
 
 Reinor is a standalone **Model Context Protocol (MCP)** application for managing and executing tasks on enrolled personal devices. It is deliberately separate from the mesh, router, DNS, and proxy infrastructure.
 
+**Naming:** **Knoven** is the private mesh-network project. **Reinor** is the network-independent device management and MCP application. The currently installed ChatGPT connector may still be displayed as **RinoCommander** until its connection title is updated.
+
 **Boundary:** Yggdrasil, LAN, Tailscale, or a conventional HTTPS network may provide connectivity. Reinor does not implement the network itself, and the network must continue working if Reinor is stopped or removed.
 
 ## What belongs here
@@ -27,7 +29,7 @@ Reinor is a standalone **Model Context Protocol (MCP)** application for managing
 - `internal/`: protocol framing, OAuth, registry and trust building blocks.
 - `proto/`: wire protocol.
 
-Some internal identifiers and default deployment URLs still use historical RinoMesh names so existing deployed clients keep working. These are **application compatibility details**, not a dependency on the retired Rino-Network repository. A later change can make the OAuth public origin configurable without changing the current deployment implicitly.
+Some internal identifiers, persisted paths, service names, and default deployment URLs still use historical RinoMesh names so existing deployed clients keep working. These are **application compatibility details**, not a dependency on the retired Rino-Network repository. A later change can make the OAuth public origin configurable without changing the current deployment implicitly.
 
 ## Development
 
