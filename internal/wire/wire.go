@@ -5,7 +5,8 @@ import (
     "fmt"
     "google.golang.org/protobuf/encoding/protowire"
 )
-const MaxFrame=256*1024
+// Screenshot data is bounded by the Agent before transmission.
+const MaxFrame=4*1024*1024
 type Envelope struct {
     Type string
     DeviceID string
@@ -17,6 +18,16 @@ type Envelope struct {
     TimeoutMS uint32
     OS string
     Error string
+    Data []byte
+    MIMEType string
+    Width uint32
+    Height uint32
+    OriginX int32
+    OriginY int32
+    PhysicalWidth uint32
+    PhysicalHeight uint32
+    Quality uint32
+    Capabilities string
 }
 func str(b []byte, n protowire.Number, s string) []byte {
     if s=="" {return b}
@@ -45,6 +56,16 @@ func Marshal(v Envelope)([]byte,error) {
     b=varint(b,8,uint64(v.TimeoutMS))
     b=str(b,9,v.OS)
     b=str(b,10,v.Error)
+    b=bytesField(b,11,v.Data)
+    b=str(b,12,v.MIMEType)
+    b=varint(b,13,uint64(v.Width))
+    b=varint(b,14,uint64(v.Height))
+    b=varint(b,15,uint64(int64(v.OriginX)))
+    b=varint(b,16,uint64(int64(v.OriginY)))
+    b=varint(b,17,uint64(v.PhysicalWidth))
+    b=varint(b,18,uint64(v.PhysicalHeight))
+    b=varint(b,19,uint64(v.Quality))
+    b=str(b,20,v.Capabilities)
     if len(b)>MaxFrame {return nil,fmt.Errorf("protobuf frame too large: %d",len(b))}
     return b,nil
 }
@@ -56,7 +77,7 @@ func Unmarshal(b []byte)(Envelope,error) {
         if n<0{return out,errors.New("malformed protobuf tag")}
         b=b[n:]
         switch field {
-        case 1,2,3,4,6,7,9,10:
+        case 1,2,3,4,6,7,9,10,11,12,20:
             if typ!=protowire.BytesType{return out,fmt.Errorf("bad wire type for field %d",field)}
             val,used:=protowire.ConsumeBytes(b)
             if used<0{return out,errors.New("malformed bytes")}
@@ -69,13 +90,26 @@ func Unmarshal(b []byte)(Envelope,error) {
             case 7:out.Stderr=append([]byte(nil),val...)
             case 9:out.OS=string(val)
             case 10:out.Error=string(val)
+            case 11:out.Data=append([]byte(nil),val...)
+            case 12:out.MIMEType=string(val)
+            case 20:out.Capabilities=string(val)
             }
             b=b[used:]
-        case 5,8:
+        case 5,8,13,14,15,16,17,18,19:
             if typ!=protowire.VarintType{return out,fmt.Errorf("bad wire type for field %d",field)}
             val,used:=protowire.ConsumeVarint(b)
             if used<0{return out,errors.New("malformed varint")}
-            if field==5{out.ExitCode=int32(val)}else{out.TimeoutMS=uint32(val)}
+            switch field {
+            case 5:out.ExitCode=int32(val)
+            case 8:out.TimeoutMS=uint32(val)
+            case 13:out.Width=uint32(val)
+            case 14:out.Height=uint32(val)
+            case 15:out.OriginX=int32(val)
+            case 16:out.OriginY=int32(val)
+            case 17:out.PhysicalWidth=uint32(val)
+            case 18:out.PhysicalHeight=uint32(val)
+            case 19:out.Quality=uint32(val)
+            }
             b=b[used:]
         default:
             used:=protowire.ConsumeFieldValue(field,typ,b)
