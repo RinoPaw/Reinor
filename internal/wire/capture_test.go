@@ -14,10 +14,14 @@ func TestScreenshotRoundTrip(t *testing.T) {
 		Quality: 75, Capabilities: "capture_screen/v1",
 	}
 	raw, err := Marshal(in)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	out, err := Unmarshal(raw)
-	if err != nil { t.Fatal(err) }
-	if out.Type != in.Type || out.TaskID != in.TaskID || !bytes.Equal(out.Data,in.Data) ||
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Type != in.Type || out.TaskID != in.TaskID || !bytes.Equal(out.Data, in.Data) ||
 		out.MIMEType != in.MIMEType || out.Width != in.Width || out.Height != in.Height ||
 		out.OriginX != in.OriginX || out.OriginY != in.OriginY ||
 		out.PhysicalWidth != in.PhysicalWidth || out.PhysicalHeight != in.PhysicalHeight ||
@@ -27,7 +31,11 @@ func TestScreenshotRoundTrip(t *testing.T) {
 }
 
 func TestScreenshotFrameLimit(t *testing.T) {
-	_, err := Marshal(Envelope{Type:"capture_result", Data: make([]byte, MaxFrame)})
-	if err == nil { t.Fatal("oversized frame should be rejected") }
-	if _,err := Unmarshal(make([]byte,MaxFrame+1));err==nil { t.Fatal("oversized incoming frame should be rejected") }
+	_, err := Marshal(Envelope{Type: "capture_result", Data: make([]byte, MaxFrame)})
+	if err == nil {
+		t.Fatal("oversized frame should be rejected")
+	}
+	if _, err := Unmarshal(make([]byte, MaxFrame+1)); err == nil {
+		t.Fatal("oversized incoming frame should be rejected")
+	}
 }

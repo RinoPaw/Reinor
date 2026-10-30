@@ -17,10 +17,10 @@ const (
 // The bitmap dimensions may be scaled down for transport. Virtual geometry
 // always describes the original desktop in physical pixels.
 type Screenshot struct {
-	Data                        []byte
-	MIMEType                    string
-	Width, Height               int
-	OriginX, OriginY            int
+	Data                          []byte
+	MIMEType                      string
+	Width, Height                 int
+	OriginX, OriginY              int
 	PhysicalWidth, PhysicalHeight int
 }
 

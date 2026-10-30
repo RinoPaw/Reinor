@@ -4,9 +4,9 @@ import "testing"
 
 func TestNormalizeOptions(t *testing.T) {
 	cases := []struct {
-		width, quality int
+		width, quality         int
 		wantWidth, wantQuality int
-		wantErr bool
+		wantErr                bool
 	}{
 		{0, 0, DefaultMaxWidth, DefaultQuality, false},
 		{320, 35, 320, 35, false},
