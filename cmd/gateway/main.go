@@ -272,8 +272,8 @@ func main() {
 	agentToken := loadSecret("RINOMESH_AGENT_TOKEN_FILE")
 	controlToken := loadSecret("RINOMESH_CONTROL_TOKEN_FILE")
 	h := newHub()
-	m := mcp.NewServer(&mcp.Implementation{Name: "rinomesh-control", Version: "0.1.0"}, nil)
-	mcp.AddTool(m, &mcp.Tool{Name: "list_devices", Description: "List online RinoMesh devices."}, func(ctx context.Context, req *mcp.CallToolRequest, args noArgs) (*mcp.CallToolResult, any, error) {
+	m := mcp.NewServer(&mcp.Implementation{Name: "reinor", Version: "0.1.0"}, nil)
+	mcp.AddTool(m, &mcp.Tool{Name: "list_devices", Description: "List online Reinor devices."}, func(ctx context.Context, req *mcp.CallToolRequest, args noArgs) (*mcp.CallToolResult, any, error) {
 		return result(h.list(), false), nil, nil
 	})
 	mcp.AddTool(m, &mcp.Tool{Name: "execute_command", Description: "Run a native OS shell command (PowerShell on Windows, /bin/sh on Linux) on an online device. May change files or system state."}, func(ctx context.Context, req *mcp.CallToolRequest, args execArgs) (*mcp.CallToolResult, any, error) {
