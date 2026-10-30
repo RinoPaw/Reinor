@@ -23,7 +23,9 @@ jobs:
       - name: Build Agent (Windows)
         run: GOOS=windows GOARCH=amd64 go build -o /tmp/reinor-agent.exe ./cmd/agent
       - name: Check Linux updater syntax
-        run: bash -n deploy/update-gateway.sh
+        run: |
+          bash -n deploy/update-gateway.sh
+          bash tests/update-gateway.sh
 
   validate-windows-update:
     runs-on: windows-latest
