@@ -11,14 +11,6 @@ WorkingDirectory=/home/ubuntu
 ExecStart=/opt/rinomesh-control/bin/rinomesh-agent-linux join --gateway https://xuhuaai.top --device rino-tx
 Restart=always
 RestartSec=8
-NoNewPrivileges=yes
-PrivateTmp=yes
-ProtectSystem=strict
-ReadWritePaths=/home/ubuntu/.config/RinoMesh
-ProtectHome=no
-CapabilityBoundingSet=
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-UMask=0077
 
 [Install]
 WantedBy=multi-user.target
