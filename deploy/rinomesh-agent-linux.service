@@ -1,8 +1,7 @@
 [Unit]
 Description=Reinor Linux Agent (enrolled device)
 After=network-online.target rinomesh-gateway.service
-Wants=network-online.target
-Requires=rinomesh-gateway.service
+Wants=network-online.target rinomesh-gateway.service
 
 [Service]
 Type=simple
