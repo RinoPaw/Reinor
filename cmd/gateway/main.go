@@ -47,6 +47,7 @@ func bearer(r *http.Request, token string) bool {
 
 type agent struct {
 	id, os    string
+	caps string
 	conn      *websocket.Conn
 	writeMu   sync.Mutex
 	busyMu    sync.Mutex
@@ -141,8 +142,25 @@ func (h *hub) completed(a *agent, v wire.Envelope) {
 	}
 }
 func (h *hub) execute(ctx context.Context, deviceID, cmd string, timeout time.Duration) (wire.Envelope, error) {
-	if !validDeviceID.MatchString(deviceID) || len(cmd) == 0 || len(cmd) > 4096 {
-		return wire.Envelope{}, errors.New("invalid device_id or command")
+	if len(cmd) == 0 || len(cmd) > 4096 {
+		return wire.Envelope{}, errors.New("invalid command")
+	}
+	return h.dispatch(ctx, deviceID, wire.Envelope{Type:"execute", Command:cmd}, timeout)
+}
+
+func (h *hub) capture(ctx context.Context, deviceID string, maxWidth, quality uint32, timeout time.Duration) (wire.Envelope, error) {
+	if maxWidth != 0 && (maxWidth < 320 || maxWidth > 3840) {
+		return wire.Envelope{}, errors.New("max_width must be between 320 and 3840")
+	}
+	if quality != 0 && (quality < 35 || quality > 90) {
+		return wire.Envelope{}, errors.New("quality must be between 35 and 90")
+	}
+	return h.dispatch(ctx, deviceID, wire.Envelope{Type:"capture_screen", Width:maxWidth, Quality:quality}, timeout)
+}
+
+func (h *hub) dispatch(ctx context.Context, deviceID string, request wire.Envelope, timeout time.Duration) (wire.Envelope, error) {
+	if !validDeviceID.MatchString(deviceID) {
+		return wire.Envelope{}, errors.New("invalid device_id")
 	}
 	if timeout <= 0 || timeout > 20*time.Second {
 		timeout = 20 * time.Second
@@ -152,6 +170,9 @@ func (h *hub) execute(ctx context.Context, deviceID, cmd string, timeout time.Du
 	h.mu.Unlock()
 	if a == nil {
 		return wire.Envelope{}, errors.New("device offline")
+	}
+	if request.Type=="capture_screen" && (a.os!="windows" || !strings.Contains(a.caps,"capture_screen/v1")) {
+		return wire.Envelope{}, errors.New("device does not support capture_screen/v1; upgrade the Windows Agent")
 	}
 	if !a.reserve() {
 		return wire.Envelope{}, errors.New("device busy")
@@ -168,7 +189,9 @@ func (h *hub) execute(ctx context.Context, deviceID, cmd string, timeout time.Du
 	h.mu.Unlock()
 	defer func() { h.mu.Lock(); delete(h.pending, id); h.mu.Unlock() }()
 	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	err := a.send(writeCtx, wire.Envelope{Type: "execute", TaskID: id, Command: cmd, TimeoutMS: uint32(timeout.Milliseconds())})
+	request.TaskID=id
+	request.TimeoutMS=uint32(timeout.Milliseconds())
+	err := a.send(writeCtx, request)
 	cancel()
 	if err != nil {
 		return wire.Envelope{}, fmt.Errorf("dispatch failed; status unknown: %w", err)
@@ -219,7 +242,7 @@ func (h *hub) serveAgent(w http.ResponseWriter, r *http.Request, token string, j
 		_ = c.Close(websocket.StatusPolicyViolation, "device not approved")
 		return
 	}
-	a := &agent{id: hello.DeviceID, os: hello.OS, conn: c, connected: time.Now()}
+	a := &agent{id: hello.DeviceID, os: hello.OS, caps:hello.Capabilities, conn: c, connected: time.Now()}
 	h.register(a)
 	defer func() { h.remove(a); _ = c.CloseNow() }()
 	go func() {
@@ -263,6 +286,11 @@ type execArgs struct {
 	DeviceID string `json:"device_id" jsonschema:"Device ID from list_devices"`
 	Command  string `json:"command" jsonschema:"PowerShell command to execute"`
 }
+type captureArgs struct {
+	DeviceID string `json:"device_id" jsonschema:"Owner-authorized device ID from list_devices"`
+	MaxWidth uint32 `json:"max_width,omitempty" jsonschema:"Maximum JPEG width in pixels (320-3840, default 1600)"`
+	Quality uint32 `json:"quality,omitempty" jsonschema:"JPEG quality (35-90, default 75)"`
+}
 
 func result(content any, isError bool) *mcp.CallToolResult {
 	b, _ := json.Marshal(content)
@@ -282,6 +310,28 @@ func main() {
 			return result(map[string]string{"error": err.Error()}, true), nil, nil
 		}
 		return result(map[string]any{"task_id": r.TaskID, "device_id": args.DeviceID, "exit_code": r.ExitCode, "stdout": string(r.Stdout), "stderr": string(r.Stderr), "error": r.Error}, r.Error != ""), nil, nil
+	})
+	mcp.AddTool(m, &mcp.Tool{Name: "capture_screen", Description: "Capture an owner-authorized interactive Windows desktop as JPEG. Returns a native image and physical-pixel desktop geometry. Captures sensitive pixels; do not invoke without explicit owner intent."}, func(ctx context.Context, req *mcp.CallToolRequest, args captureArgs) (*mcp.CallToolResult, any, error) {
+		r, err := h.capture(ctx, args.DeviceID, args.MaxWidth, args.Quality, 20*time.Second)
+		if err != nil {
+			return result(map[string]string{"error":err.Error()}, true), nil, nil
+		}
+		if r.Error != "" || len(r.Data)==0 || r.MIMEType!="image/jpeg" {
+			message:=r.Error
+			if message=="" {message="invalid or empty capture response"}
+			return result(map[string]string{"error":message}, true), nil, nil
+		}
+		info:=map[string]any{
+			"device_id":args.DeviceID, "width":r.Width, "height":r.Height,
+			"physical_width":r.PhysicalWidth, "physical_height":r.PhysicalHeight,
+			"origin_x":r.OriginX, "origin_y":r.OriginY,
+			"mime_type":r.MIMEType,
+		}
+		meta,_:=json.Marshal(info)
+		return &mcp.CallToolResult{Content:[]mcp.Content{
+			&mcp.TextContent{Text:string(meta)},
+			&mcp.ImageContent{MIMEType:r.MIMEType, Data:r.Data},
+		}}, nil, nil
 	})
 	handler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server { return m }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
 	joinDB := os.Getenv("RINOMESH_JOIN_DB")
