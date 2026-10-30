@@ -129,7 +129,7 @@ func requestTicketViaWS(address,endpoint,device,path string)error{
     saved=joinCredential{Gateway:endpoint,DeviceID:device,Ticket:msg.Command,RequestID:msg.TaskID,Pending:true}
     if err:=saveJoinCredential(path,saved);err!=nil{return err}
     exists=true
-    fmt.Printf("RinoMesh: %s requested connection\nRequest ID: %s\nWaiting for GPT approval...\n",device,msg.TaskID)
+    fmt.Printf("Reinor: %s requested connection\nRequest ID: %s\nWaiting for GPT approval...\n",device,msg.TaskID)
    }else if saved.RequestID!=msg.TaskID {return errors.New("Gateway returned wrong pending request")}
   case "join_approved":
    if !strings.HasPrefix(msg.Command,"join_secret_"){return errors.New("Gateway returned invalid approved ticket")}
