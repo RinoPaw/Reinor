@@ -1,6 +1,6 @@
 # Reinor rename and runtime compatibility
 
-Reinor is the new name of the independent personal-device MCP control application, previously known as Hexveil.
+**Knoven** names the private mesh network; **Reinor** names the network-independent personal-device management and MCP application, previously known as Hexveil. The historical **RinoCommander** ChatGPT connection is part of Reinor, not a third project.
 
 ## Renamed in source
 
@@ -13,10 +13,12 @@ Reinor is the new name of the independent personal-device MCP control applicatio
 
 - rinomesh-gateway.service, its systemd account, work directory and /opt/rinomesh-control installation layout.
 - Windows startup launcher, %LOCALAPPDATA%\RinoMesh, rinomesh-agent.exe and enrolled device state/credentials.
-- RINOMESH_* environment variables and rinomesh-control MCP implementation name.
+- RINOMESH_* environment variables, device IDs, persisted keys, and existing enrollment/protocol data. The *source code* now reports the MCP server implementation name as `reinor`; deployed clients are unchanged until an independently verified rollout.
 - wss://xuhuaai.top/agent/ws, HTTPS MCP paths, OAuth callback/issuer, protocol signatures and persisted tokens.
 - docs/legacy historical deployment records.
 
 This is a SOURCE-ONLY rebrand. Do not redeploy the Gateway, restart services, rotate credentials or rename persisted state as part of branding.
 
-GitHub repository rename to RinoPaw/Reinor is a separate administrative step. Existing consumers of the Go module may need their imports updated.
+The GitHub repository already lives at `RinoPaw/Reinor`, and the Go module path is `github.com/RinoPaw/Reinor`. The ChatGPT custom-connector display name `RinoCommander` must be changed in the connection configuration; changing a Go MCP implementation name alone does not rename the ChatGPT connection.
+
+Do not alter systemd unit IDs, network interfaces, saved device credentials, OAuth issuer, access tokens, signing domains, or wire-protocol identifiers solely for branding. The live Gateway and enrolled Agents must be updated separately with a health check and rollback plan.
