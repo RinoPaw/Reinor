@@ -2,6 +2,7 @@ name: Go
 on:
   push:
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
@@ -21,3 +22,38 @@ jobs:
         run: go build -o /tmp/reinor-gateway ./cmd/gateway
       - name: Build Agent (Windows)
         run: GOOS=windows GOARCH=amd64 go build -o /tmp/reinor-agent.exe ./cmd/agent
+      - name: Check Linux updater syntax
+        run: bash -n deploy/update-gateway.sh
+
+  validate-windows-update:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: PowerShell update staging tests
+        shell: pwsh
+        run: ./tests/update-agent.ps1
+
+  manual-build:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [test, validate-windows-update]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build staged Windows Agent and Linux Gateway
+        shell: bash
+        run: |
+          mkdir -p dist
+          GOOS=windows GOARCH=amd64 go build -trimpath -o dist/rinomesh-agent-join.exe ./cmd/agent
+          GOOS=linux GOARCH=amd64 go build -trimpath -o dist/rinomesh-gateway ./cmd/gateway
+          cd dist
+          sha256sum rinomesh-agent-join.exe rinomesh-gateway > SHA256SUMS
+      - name: Upload staged artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: reinor-manual-update-${{ github.sha }}
+          path: dist/
+          retention-days: 7
