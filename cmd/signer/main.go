@@ -139,12 +139,12 @@ func noArgs(fs *flag.FlagSet)error{
 func usage()string{
  return `Reinor Signer `+version+`  (offline owner-key CLI)
 Usage:
-  rinomesh-signer init [--home DIR]
-  rinomesh-signer account [--home DIR]
-  rinomesh-signer inspect-join --request JOIN.json
-  rinomesh-signer approve --request JOIN.json [--out APPROVAL.json] [--home DIR]
-  rinomesh-signer sign-command --gateway ID --device ID --command TEXT [--shell powershell] [--ttl 2m] [--out COMMAND.json] [--home DIR]
-  rinomesh-signer version
+  reinor-signer init [--home DIR]
+  reinor-signer account [--home DIR]
+  reinor-signer inspect-join --request JOIN.json
+  reinor-signer approve --request JOIN.json [--out APPROVAL.json] [--home DIR]
+  reinor-signer sign-command --gateway ID --device ID --command TEXT [--shell powershell] [--ttl 2m] [--out COMMAND.json] [--home DIR]
+  reinor-signer version
 Notes:
   init creates owner.key ONLY on this device; never put it on Gateway.
   Approval/command JSON is suitable for sending through the Gateway.
