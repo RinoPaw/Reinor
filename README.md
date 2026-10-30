@@ -47,7 +47,7 @@ GOOS=linux GOARCH=amd64 go build -o reinor-agent-linux ./cmd/agent
 
 The live deployment (as of 2026-10-29) uses `https://xuhuaai.top/mcp` as its authenticated MCP endpoint and `wss://xuhuaai.top/agent/ws` for outbound device Agent connections. These are configurable application endpoints at the hosting/proxy level; the MVP OAuth issuer currently defaults to this public domain. Moving Reinor source to a separate repository **does not** change the running Gateway or its enrolled Windows Agent automatically.
 
-The Agent executes PowerShell with the signed-in Windows user's permissions. The MCP control surface must require authorization, restrict trusted clients, and never expose anonymous remote execution.
+The Agent executes PowerShell on Windows and `/bin/sh` on Linux, using the operating-system permissions of the Agent account. Reinor does not implement per-device privilege management; host sudo permissions remain controlled by the operating system. The MCP control surface must require authorization, restrict trusted clients, and never expose anonymous remote execution.
 
 Keep live enrollment tickets, OAuth tokens, owner credentials and generated configuration **outside Git**, even for private repositories.
 
@@ -56,4 +56,4 @@ Keep live enrollment tickets, OAuth tokens, owner credentials and generated conf
 The project was extracted from experiments/rinomesh-mvp in RinoPaw/Rino-Network and maintained as RinoPaw/Hexveil before being named Reinor. The active Go module path is github.com/RinoPaw/Reinor.
 
 This source-only rename retains the existing deployed service names, config, credentials and enrolled-device state. Read docs/rename-compatibility.md before any deployment changes.
-The Linux Agent uses `/bin/sh -c` and has a documented unprivileged systemd deployment in [docs/linux-agent.md](docs/linux-agent.md). The Windows Agent continues using PowerShell.
+The Linux Agent uses `/bin/sh -c` and has a systemd deployment documented in [docs/linux-agent.md](docs/linux-agent.md). The Windows Agent continues using PowerShell.
