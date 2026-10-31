@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RinoPaw/Reinor/internal/wire"
 	"github.com/RinoPaw/Reinor/internal/capability"
+	"github.com/RinoPaw/Reinor/internal/wire"
 	"github.com/coder/websocket"
 )
 
@@ -97,12 +97,12 @@ func TestCaptureRejectsHeadlessAgent(t *testing.T) {
 	h.agents["linux"] = &agent{
 		id: "linux", os: "linux",
 		capabilities: []capability.Status{{
-			ID:capability.DesktopCapture,Supported:false,Available:false,Reason:capability.NoDesktopSession,
+			ID: capability.DesktopCapture, Supported: false, Available: false, Reason: capability.NoDesktopSession,
 		}},
 	}
 	_, err := h.capture(context.Background(), "linux", 0, 0, time.Second)
 	var capErr *capabilityDispatchError
-	if !errors.As(err,&capErr) || capErr.Code != capability.NoDesktopSession {
-		t.Fatalf("expected NO_DESKTOP_SESSION without sending any screenshot request, got %v",err)
+	if !errors.As(err, &capErr) || capErr.Code != capability.NoDesktopSession {
+		t.Fatalf("expected NO_DESKTOP_SESSION without sending any screenshot request, got %v", err)
 	}
 }

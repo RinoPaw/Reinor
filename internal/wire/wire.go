@@ -10,27 +10,27 @@ import (
 const MaxFrame = 4 * 1024 * 1024
 
 type Envelope struct {
-	Type            string
-	DeviceID        string
-	TaskID          string
-	Command         string
-	ExitCode        int32
-	Stdout          []byte
-	Stderr          []byte
-	TimeoutMS       uint32
-	OS              string
-	Error           string
-	Data            []byte
-	MIMEType        string
-	Width           uint32
-	Height          uint32
-	OriginX         int32
-	OriginY         int32
-	PhysicalWidth   uint32
-	PhysicalHeight  uint32
-	Quality         uint32
-	Capabilities    []byte
-	ErrorCode       string
+	Type           string
+	DeviceID       string
+	TaskID         string
+	Command        string
+	ExitCode       int32
+	Stdout         []byte
+	Stderr         []byte
+	TimeoutMS      uint32
+	OS             string
+	Error          string
+	Data           []byte
+	MIMEType       string
+	Width          uint32
+	Height         uint32
+	OriginX        int32
+	OriginY        int32
+	PhysicalWidth  uint32
+	PhysicalHeight uint32
+	Quality        uint32
+	Capabilities   []byte
+	ErrorCode      string
 }
 
 func str(b []byte, n protowire.Number, s string) []byte {
