@@ -7,6 +7,10 @@ import (
 	"fmt"
 )
 
+// ErrNoDesktopSession indicates that the current process cannot access a
+// graphical desktop. The caller can return NO_DESKTOP_SESSION to MCP.
+var ErrNoDesktopSession = errors.New("no accessible desktop session")
+
 const (
 	DefaultMaxWidth = 1600
 	DefaultQuality  = 75
