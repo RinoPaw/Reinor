@@ -33,10 +33,12 @@ func TestGatewayCaptureRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, ackBytes, err := conn.Read(ctx)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	ack, err := wire.Unmarshal(ackBytes)
 	if err != nil || ack.Type != "hello_ack" || ack.ProtocolVersion != wire.ProtocolVersion {
-		t.Fatalf("invalid gateway acknowledgment: %+v %v",ack,err)
+		t.Fatalf("invalid gateway acknowledgment: %+v %v", ack, err)
 	}
 	for i := 0; i < 50; i++ {
 		h.mu.Lock()
@@ -101,6 +103,6 @@ func TestCaptureRejectsNonWindowsAgent(t *testing.T) {
 	h.agents["linux"] = &agent{id: "linux", os: "linux"}
 	_, err := h.capture(context.Background(), "linux", 0, 0, time.Second)
 	if err == nil || !strings.Contains(err.Error(), "desktop capture requires Windows") {
-		t.Fatalf("expected unsupported OS: %v",err)
+		t.Fatalf("expected unsupported OS: %v", err)
 	}
 }

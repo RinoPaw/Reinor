@@ -15,16 +15,22 @@ import (
 func TestAgentRejectsOldGatewayHandshake(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := websocket.Accept(w, r, nil)
-		if err != nil { return }
+		if err != nil {
+			return
+		}
 		defer conn.CloseNow()
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 		defer cancel()
-		_,data,err := conn.Read(ctx)
-		if err != nil { return }
-		hello,err := wire.Unmarshal(data)
-		if err != nil || hello.ProtocolVersion != wire.ProtocolVersion { return }
+		_, data, err := conn.Read(ctx)
+		if err != nil {
+			return
+		}
+		hello, err := wire.Unmarshal(data)
+		if err != nil || hello.ProtocolVersion != wire.ProtocolVersion {
+			return
+		}
 		// Simulates a prior Gateway revision responding without a v2 ack.
-		ack,_ := wire.Marshal(wire.Envelope{Type:"hello_ack",ProtocolVersion:1})
+		ack, _ := wire.Marshal(wire.Envelope{Type: "hello_ack", ProtocolVersion: 1})
 		_ = conn.Write(ctx, websocket.MessageBinary, ack)
 	}))
 	defer server.Close()

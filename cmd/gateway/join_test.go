@@ -122,7 +122,9 @@ func TestSingleGatewayJoinToExecute(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, ackData, err := conn.Read(ctx)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	ack, err := wire.Unmarshal(ackData)
 	if err != nil || ack.Type != "hello_ack" || ack.ProtocolVersion != wire.ProtocolVersion {
 		t.Fatalf("unexpected agent handshake: %+v, %v", ack, err)
