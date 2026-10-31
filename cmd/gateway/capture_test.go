@@ -28,9 +28,15 @@ func TestGatewayCaptureRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.CloseNow()
-	hello, _ := wire.Marshal(wire.Envelope{Type: "hello", DeviceID: "screen-test", OS: "windows", Capabilities: "capture_screen/v1"})
+	hello, _ := wire.Marshal(wire.Envelope{Type: "hello", DeviceID: "screen-test", OS: "windows", ProtocolVersion: wire.ProtocolVersion})
 	if err := conn.Write(ctx, websocket.MessageBinary, hello); err != nil {
 		t.Fatal(err)
+	}
+	_, ackBytes, err := conn.Read(ctx)
+	if err != nil { t.Fatal(err) }
+	ack, err := wire.Unmarshal(ackBytes)
+	if err != nil || ack.Type != "hello_ack" || ack.ProtocolVersion != wire.ProtocolVersion {
+		t.Fatalf("invalid gateway acknowledgment: %+v %v",ack,err)
 	}
 	for i := 0; i < 50; i++ {
 		h.mu.Lock()
@@ -90,15 +96,11 @@ func TestCaptureValidation(t *testing.T) {
 	}
 }
 
-func TestCaptureRejectsUnsupportedAgent(t *testing.T) {
+func TestCaptureRejectsNonWindowsAgent(t *testing.T) {
 	h := newHub()
-	// Existing deployed Agents do not advertise screenshot support.
-	h.agents["old-windows"] = &agent{id: "old-windows", os: "windows"}
-	h.agents["linux"] = &agent{id: "linux", os: "linux", caps: "capture_screen/v1"}
-	for _, device := range []string{"old-windows", "linux"} {
-		_, err := h.capture(context.Background(), device, 0, 0, time.Second)
-		if err == nil || !strings.Contains(err.Error(), "does not support capture_screen/v1") {
-			t.Fatalf("%s: expected a fast unsupported-capability error, got %v", device, err)
-		}
+	h.agents["linux"] = &agent{id: "linux", os: "linux"}
+	_, err := h.capture(context.Background(), "linux", 0, 0, time.Second)
+	if err == nil || !strings.Contains(err.Error(), "desktop capture requires Windows") {
+		t.Fatalf("expected unsupported OS: %v",err)
 	}
 }
