@@ -329,10 +329,6 @@ func (h *hub) serveJoin(w http.ResponseWriter, r *http.Request, s *joinStore) {
 	if err != nil || hello.Type != "hello" || !validDeviceID.MatchString(hello.DeviceID) {
 		return
 	}
-	if hello.ProtocolVersion != wire.ProtocolVersion {
-		_ = c.Close(websocket.StatusPolicyViolation, "incompatible protocol version")
-		return
-	}
 	var rec joinRecord
 	var ticket string
 	if hello.Command != "" {
