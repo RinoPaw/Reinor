@@ -154,6 +154,9 @@ type capabilityDispatchError struct {
 func (e *capabilityDispatchError) Error() string { return e.Message }
 
 func (h *hub) deviceCapabilities(ctx context.Context, deviceID string) ([]capability.Status, time.Time, error) {
+	h.mu.Lock()
+	target:=h.agents[deviceID]
+	h.mu.Unlock()
 	reply,err:=h.dispatch(ctx,deviceID,wire.Envelope{Type:"get_capabilities"},5*time.Second)
 	if err!=nil{return nil,time.Time{},err}
 	if reply.Error!="" {return nil,time.Time{},errors.New(reply.Error)}
@@ -162,10 +165,12 @@ func (h *hub) deviceCapabilities(ctx context.Context, deviceID string) ([]capabi
 	if err!=nil{return nil,time.Time{},fmt.Errorf("invalid Agent capabilities: %w",err)}
 	observed:=time.Now().UTC()
 	h.mu.Lock()
-	if a:=h.agents[deviceID];a!=nil {
-		a.capabilities=statuses
-		a.capObserved=observed
+	if target==nil || h.agents[deviceID]!=target {
+		h.mu.Unlock()
+		return nil,time.Time{},errors.New("device reconnected during capability probe")
 	}
+	target.capabilities=statuses
+	target.capObserved=observed
 	h.mu.Unlock()
 	return statuses,observed,nil
 }
