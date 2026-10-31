@@ -87,7 +87,7 @@ func CaptureScreen(maxWidth, quality int) (Screenshot, error) {
 	x, y := metric(smXVirtualScreen), metric(smYVirtualScreen)
 	physicalWidth, physicalHeight := metric(smCXVirtualScreen), metric(smCYVirtualScreen)
 	if physicalWidth <= 0 || physicalHeight <= 0 {
-		return Screenshot{}, fmt.Errorf("interactive desktop unavailable: %dx%d", physicalWidth, physicalHeight)
+		return Screenshot{}, fmt.Errorf("%w: virtual desktop is %dx%d", ErrNoDesktopSession, physicalWidth, physicalHeight)
 	}
 	width := physicalWidth
 	if width > maxWidth {
@@ -100,7 +100,7 @@ func CaptureScreen(maxWidth, quality int) (Screenshot, error) {
 
 	screenDC, _, callErr := getDC.Call(0)
 	if screenDC == 0 {
-		return Screenshot{}, fmt.Errorf("GetDC: %v", callErr)
+		return Screenshot{}, fmt.Errorf("%w: GetDC: %v", ErrNoDesktopSession, callErr)
 	}
 	defer releaseDC.Call(0, screenDC)
 	memDC, _, callErr := createCompatibleDC.Call(screenDC)
