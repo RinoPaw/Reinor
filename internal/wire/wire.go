@@ -29,6 +29,8 @@ type Envelope struct {
 	PhysicalWidth   uint32
 	PhysicalHeight  uint32
 	Quality         uint32
+	Capabilities    []byte
+	ErrorCode       string
 }
 
 func str(b []byte, n protowire.Number, s string) []byte {
@@ -73,6 +75,8 @@ func Marshal(v Envelope) ([]byte, error) {
 	b = varint(b, 17, uint64(v.PhysicalWidth))
 	b = varint(b, 18, uint64(v.PhysicalHeight))
 	b = varint(b, 19, uint64(v.Quality))
+	b = bytesField(b, 20, v.Capabilities)
+	b = str(b, 21, v.ErrorCode)
 	if len(b) > MaxFrame {
 		return nil, fmt.Errorf("protobuf frame too large: %d", len(b))
 	}
@@ -90,7 +94,7 @@ func Unmarshal(b []byte) (Envelope, error) {
 		}
 		b = b[n:]
 		switch field {
-		case 1, 2, 3, 4, 6, 7, 9, 10, 11, 12:
+		case 1, 2, 3, 4, 6, 7, 9, 10, 11, 12, 20, 21:
 			if typ != protowire.BytesType {
 				return out, fmt.Errorf("bad wire type for field %d", field)
 			}
@@ -119,6 +123,10 @@ func Unmarshal(b []byte) (Envelope, error) {
 				out.Data = append([]byte(nil), val...)
 			case 12:
 				out.MIMEType = string(val)
+			case 20:
+				out.Capabilities = append([]byte(nil), val...)
+			case 21:
+				out.ErrorCode = string(val)
 			}
 			b = b[used:]
 		case 5, 8, 13, 14, 15, 16, 17, 18, 19:
