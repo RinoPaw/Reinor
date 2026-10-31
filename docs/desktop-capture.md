@@ -30,13 +30,13 @@ All captures use a temporary, **thread-scoped** Windows Per-Monitor DPI Awarenes
 
 ## Protocol and deployment
 
-- Windows Agents advertise `capture_screen/v1` during the authenticated WebSocket hello.
-- The Gateway refuses capture requests for older Agents or non-Windows devices instead of waiting for a timeout.
+- The Agent and Gateway require the same **wire protocol version 2**. Enrollment, authenticated Agent hello and Gateway acknowledgment must match exactly. Earlier and newer protocol revisions are rejected; there is no capability fallback.
+- Desktop capture is only available on Windows; non-Windows Agents receive an explicit platform error.
 - The Agent uses native Win32/GDI to capture the virtual desktop, scales it before transfer and encodes JPEG; image bytes are bounded to 3 MiB. The binary WebSocket frame limit is now 4 MiB.
 - The Gateway returns the captured image via `mcp.ImageContent`; pixels are not inserted into PowerShell stdout, written to disk or logged by default.
 - Existing `execute_command` behavior and auth stay unchanged.
 
-**Both the Gateway and Windows Agent need updating before this MCP tool can be used.** Do not hot-swap the live Agent or Gateway merely to verify this feature. Follow the existing staged-update and rollback procedures (#2).
+**Breaking change:** all deployed Agents (Windows and Linux) must be upgraded together with the Gateway. Older Agents cannot connect to a v2 Gateway, and v2 Agents reject older Gateways. Do not deploy by replacing just one side. Prepare verified binaries for every device, maintain the independent SSH recovery route, and perform a coordinated, reversible cutover (see #2). The live system is intentionally unchanged by this PR.
 
 ## Testing
 
