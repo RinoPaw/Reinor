@@ -28,7 +28,7 @@ func TestGatewayCaptureRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.CloseNow()
-	hello, _ := wire.Marshal(wire.Envelope{Type: "hello", DeviceID: "screen-test", OS: "windows"})
+	hello, _ := wire.Marshal(wire.Envelope{Type: "hello", DeviceID: "screen-test", OS: "windows", Capabilities: []byte(`[{"id":"desktop.capture","supported":true,"available":true}]`)})
 	if err := conn.Write(ctx, websocket.MessageBinary, hello); err != nil {
 		t.Fatal(err)
 	}
