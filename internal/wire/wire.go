@@ -9,9 +9,6 @@ import (
 // Screenshot data is bounded by the Agent before transmission.
 const MaxFrame = 4 * 1024 * 1024
 
-// ProtocolVersion enforces exact-match Agent/Gateway wire compatibility.
-const ProtocolVersion uint32 = 2
-
 type Envelope struct {
 	Type            string
 	DeviceID        string
@@ -32,7 +29,6 @@ type Envelope struct {
 	PhysicalWidth   uint32
 	PhysicalHeight  uint32
 	Quality         uint32
-	ProtocolVersion uint32
 }
 
 func str(b []byte, n protowire.Number, s string) []byte {
@@ -77,7 +73,6 @@ func Marshal(v Envelope) ([]byte, error) {
 	b = varint(b, 17, uint64(v.PhysicalWidth))
 	b = varint(b, 18, uint64(v.PhysicalHeight))
 	b = varint(b, 19, uint64(v.Quality))
-	b = varint(b, 20, uint64(v.ProtocolVersion))
 	if len(b) > MaxFrame {
 		return nil, fmt.Errorf("protobuf frame too large: %d", len(b))
 	}
@@ -126,7 +121,7 @@ func Unmarshal(b []byte) (Envelope, error) {
 				out.MIMEType = string(val)
 			}
 			b = b[used:]
-		case 5, 8, 13, 14, 15, 16, 17, 18, 19, 20:
+		case 5, 8, 13, 14, 15, 16, 17, 18, 19:
 			if typ != protowire.VarintType {
 				return out, fmt.Errorf("bad wire type for field %d", field)
 			}
@@ -153,8 +148,6 @@ func Unmarshal(b []byte) (Envelope, error) {
 				out.PhysicalHeight = uint32(val)
 			case 19:
 				out.Quality = uint32(val)
-			case 20:
-				out.ProtocolVersion = uint32(val)
 			}
 			b = b[used:]
 		default:
