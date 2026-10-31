@@ -117,9 +117,15 @@ func TestSingleGatewayJoinToExecute(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.CloseNow()
-	hello, _ := wire.Marshal(wire.Envelope{Type: "hello", DeviceID: "test-device-joined", OS: "windows"})
+	hello, _ := wire.Marshal(wire.Envelope{Type: "hello", DeviceID: "test-device-joined", OS: "windows", ProtocolVersion: wire.ProtocolVersion})
 	if err := conn.Write(ctx, websocket.MessageBinary, hello); err != nil {
 		t.Fatal(err)
+	}
+	_, ackData, err := conn.Read(ctx)
+	if err != nil { t.Fatal(err) }
+	ack, err := wire.Unmarshal(ackData)
+	if err != nil || ack.Type != "hello_ack" || ack.ProtocolVersion != wire.ProtocolVersion {
+		t.Fatalf("unexpected agent handshake: %+v, %v", ack, err)
 	}
 	for i := 0; i < 100; i++ {
 		if len(h.list()) == 1 {
@@ -190,7 +196,7 @@ func TestJoinThroughExistingWebSocketEndpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.CloseNow()
-	hello, _ := wire.Marshal(wire.Envelope{Type: "hello", DeviceID: "pc-joined", OS: "windows"})
+	hello, _ := wire.Marshal(wire.Envelope{Type: "hello", DeviceID: "pc-joined", OS: "windows", ProtocolVersion: wire.ProtocolVersion})
 	if err := conn.Write(ctx, websocket.MessageBinary, hello); err != nil {
 		t.Fatal(err)
 	}
