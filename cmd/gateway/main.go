@@ -237,20 +237,8 @@ func (h *hub) serveAgent(w http.ResponseWriter, r *http.Request, token string, j
 		_ = c.Close(websocket.StatusPolicyViolation, "invalid hello")
 		return
 	}
-	if hello.ProtocolVersion != wire.ProtocolVersion {
-		_ = c.Close(websocket.StatusPolicyViolation, "incompatible protocol version")
-		return
-	}
 	if !legacy && (joins == nil || !joins.allowed(hello.DeviceID, incoming)) {
 		_ = c.Close(websocket.StatusPolicyViolation, "device not approved")
-		return
-	}
-	ack, _ := wire.Marshal(wire.Envelope{Type: "hello_ack", ProtocolVersion: wire.ProtocolVersion})
-	ackCtx, stopAck := context.WithTimeout(ctx, 5*time.Second)
-	err = c.Write(ackCtx, websocket.MessageBinary, ack)
-	stopAck()
-	if err != nil {
-		_ = c.CloseNow()
 		return
 	}
 	a := &agent{id: hello.DeviceID, os: hello.OS, conn: c, connected: time.Now()}
