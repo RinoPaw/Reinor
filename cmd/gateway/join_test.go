@@ -117,7 +117,7 @@ func TestSingleGatewayJoinToExecute(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.CloseNow()
-	hello, _ := wire.Marshal(wire.Envelope{Type: "hello", DeviceID: "test-device-joined", OS: "windows"})
+	hello, _ := wire.Marshal(wire.Envelope{Type: "hello", DeviceID: "test-device-joined", OS: "windows", Capabilities: []byte(`[{"id":"desktop.capture","supported":true,"available":true}]`)})
 	if err := conn.Write(ctx, websocket.MessageBinary, hello); err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +190,7 @@ func TestJoinThroughExistingWebSocketEndpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.CloseNow()
-	hello, _ := wire.Marshal(wire.Envelope{Type: "hello", DeviceID: "pc-joined", OS: "windows"})
+	hello, _ := wire.Marshal(wire.Envelope{Type: "hello", DeviceID: "pc-joined", OS: "windows", Capabilities: []byte(`[{"id":"desktop.capture","supported":true,"available":true}]`)})
 	if err := conn.Write(ctx, websocket.MessageBinary, hello); err != nil {
 		t.Fatal(err)
 	}
