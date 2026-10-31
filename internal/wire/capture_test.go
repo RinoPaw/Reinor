@@ -11,7 +11,7 @@ func TestScreenshotRoundTrip(t *testing.T) {
 		MIMEType: "image/jpeg", Data: []byte{0xff, 0xd8, 1, 2, 3, 0xff, 0xd9},
 		Width: 1600, Height: 1000, OriginX: -1920, OriginY: -120,
 		PhysicalWidth: 2560, PhysicalHeight: 1600,
-		Quality: 75, Capabilities: "capture_screen/v1",
+		Quality: 75, ProtocolVersion: ProtocolVersion,
 	}
 	raw, err := Marshal(in)
 	if err != nil {
@@ -25,7 +25,7 @@ func TestScreenshotRoundTrip(t *testing.T) {
 		out.MIMEType != in.MIMEType || out.Width != in.Width || out.Height != in.Height ||
 		out.OriginX != in.OriginX || out.OriginY != in.OriginY ||
 		out.PhysicalWidth != in.PhysicalWidth || out.PhysicalHeight != in.PhysicalHeight ||
-		out.Quality != in.Quality || out.Capabilities != in.Capabilities {
+		out.Quality != in.Quality || out.ProtocolVersion != in.ProtocolVersion {
 		t.Fatalf("screenshot transport mismatch: %#v", out)
 	}
 }
