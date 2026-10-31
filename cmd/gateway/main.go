@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/RinoPaw/Reinor/internal/capability"
 	"github.com/RinoPaw/Reinor/internal/oauthlocal"
 	"github.com/RinoPaw/Reinor/internal/wire"
 	"github.com/coder/websocket"
@@ -52,6 +53,10 @@ type agent struct {
 	busyMu    sync.Mutex
 	busy      bool
 	connected time.Time
+
+	// Guarded by hub.mu; snapshot availability is from last observation.
+	capabilities []capability.Status
+	capObserved time.Time
 }
 
 func (a *agent) send(ctx context.Context, frame wire.Envelope) error {
@@ -124,6 +129,8 @@ func (h *hub) list() []map[string]any {
 		if a := h.agents[id]; a != nil {
 			item["online"] = true
 			item["connected_at"] = a.connected.UTC().Format(time.RFC3339)
+			item["capabilities"] = append([]capability.Status(nil), a.capabilities...)
+			item["capabilities_observed_at"] = a.capObserved.UTC().Format(time.RFC3339Nano)
 		}
 		arr = append(arr, item)
 	}
@@ -140,6 +147,29 @@ func (h *hub) completed(a *agent, v wire.Envelope) {
 		}
 	}
 }
+type capabilityDispatchError struct {
+	Code string
+	Message string
+}
+func (e *capabilityDispatchError) Error() string { return e.Message }
+
+func (h *hub) deviceCapabilities(ctx context.Context, deviceID string) ([]capability.Status, time.Time, error) {
+	reply,err:=h.dispatch(ctx,deviceID,wire.Envelope{Type:"get_capabilities"},5*time.Second)
+	if err!=nil{return nil,time.Time{},err}
+	if reply.Error!="" {return nil,time.Time{},errors.New(reply.Error)}
+	if reply.Type!="capabilities_result" {return nil,time.Time{},fmt.Errorf("unexpected capabilities response: %q",reply.Type)}
+	statuses,err:=capability.Decode(reply.Capabilities)
+	if err!=nil{return nil,time.Time{},fmt.Errorf("invalid Agent capabilities: %w",err)}
+	observed:=time.Now().UTC()
+	h.mu.Lock()
+	if a:=h.agents[deviceID];a!=nil {
+		a.capabilities=statuses
+		a.capObserved=observed
+	}
+	h.mu.Unlock()
+	return statuses,observed,nil
+}
+
 func (h *hub) execute(ctx context.Context, deviceID, cmd string, timeout time.Duration) (wire.Envelope, error) {
 	if len(cmd) == 0 || len(cmd) > 4096 {
 		return wire.Envelope{}, errors.New("invalid command")
@@ -166,12 +196,19 @@ func (h *hub) dispatch(ctx context.Context, deviceID string, request wire.Envelo
 	}
 	h.mu.Lock()
 	a := h.agents[deviceID]
+	var capStatus capability.Status
+	var hasCap bool
+	if a!=nil && request.Type=="capture_screen" {
+		capStatus,hasCap=capability.Find(a.capabilities,capability.DesktopCapture)
+	}
 	h.mu.Unlock()
 	if a == nil {
 		return wire.Envelope{}, errors.New("device offline")
 	}
-	if request.Type == "capture_screen" && a.os != "windows" {
-		return wire.Envelope{}, errors.New("desktop capture requires Windows")
+	if request.Type=="capture_screen" && (!hasCap || !capStatus.Supported) {
+		code:=capability.Unsupported
+		if hasCap && capStatus.Reason!="" {code=capStatus.Reason}
+		return wire.Envelope{},&capabilityDispatchError{Code:code,Message:"desktop capture unavailable on device"}
 	}
 	if !a.reserve() {
 		return wire.Envelope{}, errors.New("device busy")
@@ -241,7 +278,13 @@ func (h *hub) serveAgent(w http.ResponseWriter, r *http.Request, token string, j
 		_ = c.Close(websocket.StatusPolicyViolation, "device not approved")
 		return
 	}
-	a := &agent{id: hello.DeviceID, os: hello.OS, conn: c, connected: time.Now()}
+	statuses,err:=capability.Decode(hello.Capabilities)
+	if err!=nil {
+		_ = c.Close(websocket.StatusPolicyViolation, "invalid capability announcement")
+		return
+	}
+	now:=time.Now()
+	a := &agent{id: hello.DeviceID, os: hello.OS, conn: c, connected: now, capabilities: statuses, capObserved:now}
 	h.register(a)
 	defer func() { h.remove(a); _ = c.CloseNow() }()
 	go func() {
@@ -274,7 +317,7 @@ func (h *hub) serveAgent(w http.ResponseWriter, r *http.Request, token string, j
 		if err != nil {
 			return
 		}
-		if frame.Type == "result" || frame.Type == "capture_result" {
+		if frame.Type == "result" || frame.Type == "capture_result" || frame.Type == "capabilities_result" {
 			h.completed(a, frame)
 		}
 	}
@@ -284,6 +327,9 @@ type noArgs struct{}
 type execArgs struct {
 	DeviceID string `json:"device_id" jsonschema:"Device ID from list_devices"`
 	Command  string `json:"command" jsonschema:"PowerShell command to execute"`
+}
+type deviceArgs struct {
+	DeviceID string `json:"device_id" jsonschema:"Device ID from list_devices"`
 }
 type captureArgs struct {
 	DeviceID string `json:"device_id" jsonschema:"Owner-authorized device ID from list_devices"`
@@ -303,6 +349,15 @@ func main() {
 	mcp.AddTool(m, &mcp.Tool{Name: "list_devices", Description: "List online Reinor devices."}, func(ctx context.Context, req *mcp.CallToolRequest, args noArgs) (*mcp.CallToolResult, any, error) {
 		return result(h.list(), false), nil, nil
 	})
+	mcp.AddTool(m, &mcp.Tool{Name: "get_device_capabilities", Description: "Probe device capabilities now; support and availability are separate and can change after login."}, func(ctx context.Context, req *mcp.CallToolRequest, args deviceArgs) (*mcp.CallToolResult, any, error) {
+		caps,observed,err:=h.deviceCapabilities(ctx,args.DeviceID)
+		if err!=nil {return result(map[string]string{"error":err.Error()},true),nil,nil}
+		return result(map[string]any{
+			"device_id":args.DeviceID,
+			"capabilities":caps,
+			"observed_at":observed.Format(time.RFC3339Nano),
+		},false),nil,nil
+	})
 	mcp.AddTool(m, &mcp.Tool{Name: "execute_command", Description: "Run a native OS shell command (PowerShell on Windows, /bin/sh on Linux) on an online device. May change files or system state."}, func(ctx context.Context, req *mcp.CallToolRequest, args execArgs) (*mcp.CallToolResult, any, error) {
 		r, err := h.execute(ctx, args.DeviceID, args.Command, 20*time.Second)
 		if err != nil {
@@ -310,17 +365,20 @@ func main() {
 		}
 		return result(map[string]any{"task_id": r.TaskID, "device_id": args.DeviceID, "exit_code": r.ExitCode, "stdout": string(r.Stdout), "stderr": string(r.Stderr), "error": r.Error}, r.Error != ""), nil, nil
 	})
-	mcp.AddTool(m, &mcp.Tool{Name: "capture_screen", Description: "Capture an owner-authorized interactive Windows desktop as JPEG. Returns a native image and physical-pixel desktop geometry. Captures sensitive pixels; do not invoke without explicit owner intent."}, func(ctx context.Context, req *mcp.CallToolRequest, args captureArgs) (*mcp.CallToolResult, any, error) {
+	mcp.AddTool(m, &mcp.Tool{Name: "capture_screen", Description: "Capture an explicitly owner-authorized interactive desktop on a device advertising desktop.capture. Returns JPEG and physical-pixel geometry; a headless device returns a structured unavailable error."}, func(ctx context.Context, req *mcp.CallToolRequest, args captureArgs) (*mcp.CallToolResult, any, error) {
 		r, err := h.capture(ctx, args.DeviceID, args.MaxWidth, args.Quality, 20*time.Second)
 		if err != nil {
-			return result(map[string]string{"error": err.Error()}, true), nil, nil
+			code:="REQUEST_FAILED"
+			var capErr *capabilityDispatchError
+			if errors.As(err,&capErr){code=capErr.Code}
+			return result(map[string]string{"device_id":args.DeviceID,"code":code,"error":err.Error()}, true), nil, nil
 		}
 		if r.Error != "" || len(r.Data) == 0 || r.MIMEType != "image/jpeg" {
 			message := r.Error
-			if message == "" {
-				message = "invalid or empty capture response"
-			}
-			return result(map[string]string{"error": message}, true), nil, nil
+			if message == "" {message="invalid or empty capture response"}
+			code:=r.ErrorCode
+			if code=="" {code=capability.CaptureFailed}
+			return result(map[string]string{"device_id":args.DeviceID,"code":code,"error":message}, true),nil,nil
 		}
 		info := map[string]any{
 			"device_id": args.DeviceID, "width": r.Width, "height": r.Height,
