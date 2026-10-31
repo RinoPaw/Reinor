@@ -184,7 +184,7 @@ func requestTicketViaWS(address, endpoint, device, path string) error {
 	}
 	defer conn.CloseNow()
 	conn.SetReadLimit(wire.MaxFrame)
-	hello := wire.Envelope{Type: "hello", DeviceID: device, OS: runtime.GOOS, ProtocolVersion: wire.ProtocolVersion}
+	hello := wire.Envelope{Type: "hello", DeviceID: device, OS: runtime.GOOS}
 	if exists && saved.Pending {
 		hello.Command = saved.Ticket
 	}
@@ -203,9 +203,6 @@ func requestTicketViaWS(address, endpoint, device, path string) error {
 		msg, err := wire.Unmarshal(data)
 		if err != nil {
 			return err
-		}
-		if msg.ProtocolVersion != wire.ProtocolVersion {
-			return fmt.Errorf("incompatible enrollment gateway protocol: expected v%d, got v%d", wire.ProtocolVersion, msg.ProtocolVersion)
 		}
 		switch msg.Type {
 		case "join_pending":
