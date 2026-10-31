@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/RinoPaw/Reinor/internal/capability"
 	"github.com/RinoPaw/Reinor/internal/desktop"
 	"github.com/RinoPaw/Reinor/internal/wire"
 	"github.com/coder/websocket"
@@ -99,11 +100,35 @@ func execute(f wire.Envelope) wire.Envelope {
 	}
 	return reply
 }
+func capabilitySnapshot(taskID string) wire.Envelope {
+	reply := wire.Envelope{Type: "capabilities_result", TaskID: taskID}
+	payload, err := capability.Encode([]capability.Status{desktop.Capability()})
+	if err != nil {
+		reply.Error = err.Error()
+		return reply
+	}
+	reply.Capabilities = payload
+	return reply
+}
+
 func captureScreen(f wire.Envelope) wire.Envelope {
 	reply := wire.Envelope{Type: "capture_result", TaskID: f.TaskID}
+	status := desktop.Capability()
+	if !status.Supported || !status.Available {
+		reply.ErrorCode = status.Reason
+		if reply.ErrorCode == "" {
+			reply.ErrorCode = capability.Unsupported
+		}
+		reply.Error = fmt.Sprintf("%s is unavailable: %s", status.ID, reply.ErrorCode)
+		return reply
+	}
 	shot, err := desktop.CaptureScreen(int(f.Width), int(f.Quality))
 	if err != nil {
 		reply.Error = err.Error()
+		reply.ErrorCode = capability.CaptureFailed
+		if errors.Is(err, desktop.ErrNoDesktopSession) {
+			reply.ErrorCode = capability.NoDesktopSession
+		}
 		return reply
 	}
 	reply.Data = shot.Data
@@ -127,7 +152,11 @@ func session(parent context.Context, url, id, token string) error {
 	}
 	defer c.CloseNow()
 	c.SetReadLimit(wire.MaxFrame)
-	hello, _ := wire.Marshal(wire.Envelope{Type: "hello", DeviceID: id, OS: runtime.GOOS})
+	capabilities, err := capability.Encode([]capability.Status{desktop.Capability()})
+	if err != nil {
+		return fmt.Errorf("collect device capabilities: %w", err)
+	}
+	hello, _ := wire.Marshal(wire.Envelope{Type: "hello", DeviceID: id, OS: runtime.GOOS, Capabilities: capabilities})
 	if err := c.Write(parent, websocket.MessageBinary, hello); err != nil {
 		return err
 	}
@@ -159,7 +188,7 @@ func session(parent context.Context, url, id, token string) error {
 		if err != nil {
 			return err
 		}
-		if f.Type != "execute" && f.Type != "capture_screen" {
+		if f.Type != "execute" && f.Type != "capture_screen" && f.Type != "get_capabilities" {
 			continue
 		}
 		select {
@@ -167,9 +196,12 @@ func session(parent context.Context, url, id, token string) error {
 			go func(f wire.Envelope) {
 				defer func() { <-busy }()
 				var reply wire.Envelope
-				if f.Type == "capture_screen" {
+				switch f.Type {
+				case "capture_screen":
 					reply = captureScreen(f)
-				} else {
+				case "get_capabilities":
+					reply = capabilitySnapshot(f.TaskID)
+				default:
 					reply = execute(f)
 				}
 				if err := send(reply); err != nil {
