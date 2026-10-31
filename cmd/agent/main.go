@@ -127,25 +127,11 @@ func session(parent context.Context, url, id, token string) error {
 	}
 	defer c.CloseNow()
 	c.SetReadLimit(wire.MaxFrame)
-	hello, _ := wire.Marshal(wire.Envelope{Type: "hello", DeviceID: id, OS: runtime.GOOS, ProtocolVersion: wire.ProtocolVersion})
-	handshakeCtx, stopHandshake := context.WithTimeout(parent, 10*time.Second)
-	if err := c.Write(handshakeCtx, websocket.MessageBinary, hello); err != nil {
-		stopHandshake()
-		return fmt.Errorf("send gateway hello: %w", err)
+	hello, _ := wire.Marshal(wire.Envelope{Type: "hello", DeviceID: id, OS: runtime.GOOS})
+	if err := c.Write(parent, websocket.MessageBinary, hello); err != nil {
+		return err
 	}
-	typ, ackBytes, err := c.Read(handshakeCtx)
-	stopHandshake()
-	if err != nil {
-		return fmt.Errorf("gateway protocol handshake failed (expected v%d): %w", wire.ProtocolVersion, err)
-	}
-	if typ != websocket.MessageBinary {
-		return errors.New("gateway protocol handshake returned a non-binary frame")
-	}
-	ack, err := wire.Unmarshal(ackBytes)
-	if err != nil || ack.Type != "hello_ack" || ack.ProtocolVersion != wire.ProtocolVersion {
-		return fmt.Errorf("incompatible gateway protocol: expected hello_ack v%d, got %q v%d (parse error: %v)", wire.ProtocolVersion, ack.Type, ack.ProtocolVersion, err)
-	}
-	log.Printf("connected to gateway device=%s protocol=%d", id, wire.ProtocolVersion)
+	log.Printf("connected to gateway device=%s", id)
 	var writeMu sync.Mutex
 	busy := make(chan struct{}, 1)
 	connection, closeConn := context.WithCancel(parent)
