@@ -47,7 +47,6 @@ func bearer(r *http.Request, token string) bool {
 
 type agent struct {
 	id, os    string
-	caps      string
 	conn      *websocket.Conn
 	writeMu   sync.Mutex
 	busyMu    sync.Mutex
@@ -171,8 +170,8 @@ func (h *hub) dispatch(ctx context.Context, deviceID string, request wire.Envelo
 	if a == nil {
 		return wire.Envelope{}, errors.New("device offline")
 	}
-	if request.Type == "capture_screen" && (a.os != "windows" || !strings.Contains(a.caps, "capture_screen/v1")) {
-		return wire.Envelope{}, errors.New("device does not support capture_screen/v1; upgrade the Windows Agent")
+	if request.Type == "capture_screen" && a.os != "windows" {
+		return wire.Envelope{}, errors.New("desktop capture requires Windows")
 	}
 	if !a.reserve() {
 		return wire.Envelope{}, errors.New("device busy")
@@ -238,11 +237,23 @@ func (h *hub) serveAgent(w http.ResponseWriter, r *http.Request, token string, j
 		_ = c.Close(websocket.StatusPolicyViolation, "invalid hello")
 		return
 	}
+	if hello.ProtocolVersion != wire.ProtocolVersion {
+		_ = c.Close(websocket.StatusPolicyViolation, "incompatible protocol version")
+		return
+	}
 	if !legacy && (joins == nil || !joins.allowed(hello.DeviceID, incoming)) {
 		_ = c.Close(websocket.StatusPolicyViolation, "device not approved")
 		return
 	}
-	a := &agent{id: hello.DeviceID, os: hello.OS, caps: hello.Capabilities, conn: c, connected: time.Now()}
+	ack, _ := wire.Marshal(wire.Envelope{Type: "hello_ack", ProtocolVersion: wire.ProtocolVersion})
+	ackCtx, stopAck := context.WithTimeout(ctx, 5*time.Second)
+	err = c.Write(ackCtx, websocket.MessageBinary, ack)
+	stopAck()
+	if err != nil {
+		_ = c.CloseNow()
+		return
+	}
+	a := &agent{id: hello.DeviceID, os: hello.OS, conn: c, connected: time.Now()}
 	h.register(a)
 	defer func() { h.remove(a); _ = c.CloseNow() }()
 	go func() {
