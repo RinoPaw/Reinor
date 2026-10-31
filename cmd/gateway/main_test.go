@@ -30,8 +30,14 @@ func TestGatewayAgentRoundTrip(t *testing.T) {
  conn,_,err:=websocket.Dial(ctx,url,&websocket.DialOptions{HTTPHeader:http.Header{"Authorization":[]string{"Bearer "+token}}})
  if err!=nil{t.Fatal(err)}
  defer conn.CloseNow()
- hello,_:=wire.Marshal(wire.Envelope{Type:"hello",DeviceID:"test-pc",OS:"windows"})
+ hello,_:=wire.Marshal(wire.Envelope{Type:"hello",DeviceID:"test-pc",OS:"windows",ProtocolVersion:wire.ProtocolVersion})
  if err:=conn.Write(ctx,websocket.MessageBinary,hello);err!=nil{t.Fatal(err)}
+ _,ackBytes,err:=conn.Read(ctx)
+ if err!=nil{t.Fatal(err)}
+ ack,err:=wire.Unmarshal(ackBytes)
+ if err!=nil || ack.Type!="hello_ack" || ack.ProtocolVersion!=wire.ProtocolVersion{
+  t.Fatalf("unexpected handshake response: %+v, %v",ack,err)
+ }
  for i:=0;i<100;i++{
   if len(h.list())==1{break}
   time.Sleep(10*time.Millisecond)
