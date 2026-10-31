@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/RinoPaw/Reinor/internal/wire"
+	"github.com/RinoPaw/Reinor/internal/capability"
 	"github.com/coder/websocket"
 )
 
@@ -90,11 +92,17 @@ func TestCaptureValidation(t *testing.T) {
 	}
 }
 
-func TestCaptureRejectsNonWindowsAgent(t *testing.T) {
+func TestCaptureRejectsHeadlessAgent(t *testing.T) {
 	h := newHub()
-	h.agents["linux"] = &agent{id: "linux", os: "linux"}
+	h.agents["linux"] = &agent{
+		id: "linux", os: "linux",
+		capabilities: []capability.Status{{
+			ID:capability.DesktopCapture,Supported:false,Available:false,Reason:capability.NoDesktopSession,
+		}},
+	}
 	_, err := h.capture(context.Background(), "linux", 0, 0, time.Second)
-	if err == nil || !strings.Contains(err.Error(), "desktop capture requires Windows") {
-		t.Fatalf("expected unsupported OS: %v", err)
+	var capErr *capabilityDispatchError
+	if !errors.As(err,&capErr) || capErr.Code != capability.NoDesktopSession {
+		t.Fatalf("expected NO_DESKTOP_SESSION without sending any screenshot request, got %v",err)
 	}
 }
