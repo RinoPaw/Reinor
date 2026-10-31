@@ -26,16 +26,16 @@ func TestResumableJoinSurvivesWebSocketDisconnect(t *testing.T){
   _,data,err:=conn.Read(context.Background())
   if err!=nil{return}
   hello,err:=wire.Unmarshal(data)
-  if err!=nil||hello.DeviceID!=device{return}
+  if err!=nil||hello.DeviceID!=device||hello.ProtocolVersion!=wire.ProtocolVersion{return}
   n:=connections.Add(1)
   if n==1{
    if hello.Command!=""{return}
-   pending,_:=wire.Marshal(wire.Envelope{Type:"join_pending",TaskID:request,DeviceID:device,Command:ticket})
+   pending,_:=wire.Marshal(wire.Envelope{Type:"join_pending",ProtocolVersion:wire.ProtocolVersion,TaskID:request,DeviceID:device,Command:ticket})
    _=conn.Write(context.Background(),websocket.MessageBinary,pending)
    return // simulate WebSocket disconnect before owner approval
   }
   if hello.Command!=ticket{return}
-  approved,_:=wire.Marshal(wire.Envelope{Type:"join_approved",TaskID:request,Command:ticket})
+  approved,_:=wire.Marshal(wire.Envelope{Type:"join_approved",ProtocolVersion:wire.ProtocolVersion,TaskID:request,Command:ticket})
   _=conn.Write(context.Background(),websocket.MessageBinary,approved)
  }))
  defer server.Close()
