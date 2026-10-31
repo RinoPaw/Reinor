@@ -329,6 +329,10 @@ func (h *hub) serveJoin(w http.ResponseWriter, r *http.Request, s *joinStore) {
 	if err != nil || hello.Type != "hello" || !validDeviceID.MatchString(hello.DeviceID) {
 		return
 	}
+	if hello.ProtocolVersion != wire.ProtocolVersion {
+		_ = c.Close(websocket.StatusPolicyViolation, "incompatible protocol version")
+		return
+	}
 	var rec joinRecord
 	var ticket string
 	if hello.Command != "" {
@@ -338,16 +342,16 @@ func (h *hub) serveJoin(w http.ResponseWriter, r *http.Request, s *joinStore) {
 		rec, ticket, err = s.submit(hello.DeviceID, hello.OS)
 	}
 	if err != nil {
-		data, _ := wire.Marshal(wire.Envelope{Type: "join_error", Error: err.Error()})
+		data, _ := wire.Marshal(wire.Envelope{Type: "join_error", ProtocolVersion: wire.ProtocolVersion, Error: err.Error()})
 		_ = c.Write(ctx, websocket.MessageBinary, data)
 		return
 	}
 	if rec.State == "approved" {
-		approved, _ := wire.Marshal(wire.Envelope{Type: "join_approved", TaskID: rec.ID, Command: ticket})
+		approved, _ := wire.Marshal(wire.Envelope{Type: "join_approved", ProtocolVersion: wire.ProtocolVersion, TaskID: rec.ID, Command: ticket})
 		_ = c.Write(ctx, websocket.MessageBinary, approved)
 		return
 	}
-	pending, _ := wire.Marshal(wire.Envelope{Type: "join_pending", TaskID: rec.ID, DeviceID: rec.DeviceID, Command: ticket})
+	pending, _ := wire.Marshal(wire.Envelope{Type: "join_pending", ProtocolVersion: wire.ProtocolVersion, TaskID: rec.ID, DeviceID: rec.DeviceID, Command: ticket})
 	if err := c.Write(ctx, websocket.MessageBinary, pending); err != nil {
 		return
 	}
@@ -364,12 +368,12 @@ func (h *hub) serveJoin(w http.ResponseWriter, r *http.Request, s *joinStore) {
 				return
 			}
 			if status.State == "rejected" || status.State == "superseded" {
-				data, _ := wire.Marshal(wire.Envelope{Type: "join_error", TaskID: rec.ID, Error: "request rejected"})
+				data, _ := wire.Marshal(wire.Envelope{Type: "join_error", ProtocolVersion: wire.ProtocolVersion, TaskID: rec.ID, Error: "request rejected"})
 				_ = c.Write(ctx, websocket.MessageBinary, data)
 				return
 			}
 			if status.State == "approved" {
-				data, _ := wire.Marshal(wire.Envelope{Type: "join_approved", TaskID: rec.ID, Command: ticket})
+				data, _ := wire.Marshal(wire.Envelope{Type: "join_approved", ProtocolVersion: wire.ProtocolVersion, TaskID: rec.ID, Command: ticket})
 				_ = c.Write(ctx, websocket.MessageBinary, data)
 				return
 			}
@@ -378,7 +382,7 @@ func (h *hub) serveJoin(w http.ResponseWriter, r *http.Request, s *joinStore) {
 			heartbeatTicks++
 			if heartbeatTicks >= 5 {
 				heartbeatTicks = 0
-				alive, _ := wire.Marshal(wire.Envelope{Type: "join_waiting", TaskID: rec.ID})
+				alive, _ := wire.Marshal(wire.Envelope{Type: "join_waiting", ProtocolVersion: wire.ProtocolVersion, TaskID: rec.ID})
 				writeCtx, stop := context.WithTimeout(ctx, 5*time.Second)
 				err := c.Write(writeCtx, websocket.MessageBinary, alive)
 				stop()
