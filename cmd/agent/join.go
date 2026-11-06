@@ -7,7 +7,7 @@ import (
  "flag"
  "fmt"
  "log"
- "math/rand/v2"
+ "math/rand"
  "net/http"
  "net/url"
  "os"
@@ -83,7 +83,7 @@ func joinMain(args []string)error{
     if removeErr:=os.Remove(path);removeErr!=nil{return removeErr}
    }
    log.Printf("join connection lost: %v; retrying",err)
-   time.Sleep(backoff+time.Duration(rand.Int64N(int64(backoff/2+1))))
+   time.Sleep(backoff+time.Duration(rand.Int63n(int64(backoff/2+1))))
    if backoff<30*time.Second{backoff*=2;if backoff>30*time.Second{backoff=30*time.Second}}
   }
   stored,exists,err=readJoinCredential(path,endpoint,*device)
@@ -96,7 +96,7 @@ func joinMain(args []string)error{
   err:=session(context.Background(),ws,*device,stored.Ticket)
   if time.Since(since)>time.Minute{backoff=time.Second}
   log.Printf("Gateway disconnected: %v",err)
-  time.Sleep(backoff+time.Duration(rand.Int64N(int64(backoff/2+1))))
+  time.Sleep(backoff+time.Duration(rand.Int63n(int64(backoff/2+1))))
   if backoff<30*time.Second{backoff*=2;if backoff>30*time.Second{backoff=30*time.Second}}
  }
 }

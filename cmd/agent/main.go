@@ -7,7 +7,7 @@ import (
  "flag"
  "fmt"
  "log"
- "math/rand/v2"
+ "math/rand"
  "net/http"
  "os"
  "os/exec"
@@ -119,7 +119,7 @@ func main(){
   err:=session(context.Background(),*url,*device,token)
   if time.Since(started)>time.Minute{backoff=time.Second}
   log.Printf("gateway disconnected: %v",err)
-  delay:=backoff+time.Duration(rand.Int64N(int64(backoff/2+1)))
+  delay:=backoff+time.Duration(rand.Int63n(int64(backoff/2+1)))
   time.Sleep(delay)
   if backoff<30*time.Second{backoff*=2;if backoff>30*time.Second{backoff=30*time.Second}}
  }
