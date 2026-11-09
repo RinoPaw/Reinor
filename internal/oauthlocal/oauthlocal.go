@@ -172,7 +172,7 @@ func showAuthorized(w http.ResponseWriter,callbackURL string){
  w.Header().Set("Referrer-Policy","no-referrer")
  w.Header().Set("Content-Security-Policy","default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'")
  address:=html.EscapeString(callbackURL)
- _,_=io.WriteString(w,"<!doctype html><html lang='zh-CN'><meta charset='utf-8'><meta name='viewport' content='width=device-width'><meta http-equiv='refresh' content='1;url="+address+"'><title>Reinor 授权成功</title><style>body{font:16px system-ui,sans-serif;max-width:440px;margin:8vh auto;padding:20px;color:#222}a{display:block;text-align:center;padding:14px;background:#1769c2;color:white;border-radius:6px;text-decoration:none;margin-top:18px}</style><h2>已授权 MCP 客户端</h2><p>正在返回客户端。如果浏览器没有自动跳转，请点击下面的按钮。</p><a rel='noreferrer' href='"+address+"'>返回客户端完成连接</a><p>请勿分享此页面的跳转地址。</p></html>")
+ _,_=io.WriteString(w,"<!doctype html><html lang='zh-CN'><meta charset='utf-8'><meta name='viewport' content='width=device-width'><meta http-equiv='refresh' content='0;url="+address+"'><title>Reinor 授权成功</title><style>body{font:16px system-ui,sans-serif;max-width:440px;margin:8vh auto;padding:20px;color:#222}a{display:block;text-align:center;padding:14px;background:#1769c2;color:white;border-radius:6px;text-decoration:none;margin-top:18px}</style><h2>已授权 MCP 客户端</h2><p>正在返回客户端。如果浏览器没有自动跳转，请点击下面的按钮。</p><a rel='noreferrer' href='"+address+"'>返回客户端完成连接</a><p>请勿分享此页面的跳转地址。</p></html>")
 }
 
 func (s *Server)Authorize(w http.ResponseWriter,r *http.Request){
