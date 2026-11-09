@@ -103,6 +103,7 @@ func joinMain(args []string) error {
 	fs := flag.NewFlagSet("join", flag.ContinueOnError)
 	gateway := fs.String("gateway", "https://xuhuaai.top", "Gateway URL")
 	device := fs.String("device", hostname, "Device ID")
+	temporary := fs.Bool("temporary", false, "one-time support session: no credential file and no automatic reconnect")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -113,6 +114,7 @@ func joinMain(args []string) error {
 	if err != nil {
 		return err
 	}
+	if *temporary { return joinTemporary(ws, *device) }
 	path, err := joinFile(*device)
 	if err != nil {
 		return err
