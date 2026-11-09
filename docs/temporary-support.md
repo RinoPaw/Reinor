@@ -19,6 +19,17 @@ Download the verified `reinor-agent-temp.exe` from the operator's trusted link, 
 
 Do not run as Administrator unless a diagnostic actually needs administrator rights and the friend separately approves that specific action. No service or startup task is created.
 
+### On a Linux x86-64 computer
+
+Download `reinor-agent-temp-linux-amd64` from `https://xuhuaai.top/rtl`, then launch from an unprivileged shell:
+
+```sh
+chmod +x reinor-agent-temp-linux-amd64
+./reinor-agent-temp-linux-amd64 join -temporary -device temp-friend-mysql
+```
+
+Both download links retain stable filenames across releases. Do not run with sudo unless separately authorized for a specific step.
+
 The program prints a `join_...` request ID, but **does not print or save the private join ticket**. The friend sends the request ID to the operator. This is a 10-minute pending approval window.
 
 The operator calls `list_join_requests` to confirm the exact device name and `mode=temporary`, then `approve_join_request(request_id)`. Approval starts a **60-minute server-side lifetime**.
