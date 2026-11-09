@@ -34,6 +34,7 @@ type joinRecord struct {
 	ExpiresAt   time.Time `json:"expires_at,omitempty"`
 	UsedAt      time.Time `json:"used_at,omitempty"`
 }
+
 const (
 	temporaryPendingTTL = 10 * time.Minute
 	temporarySessionTTL = 60 * time.Minute
@@ -169,9 +170,13 @@ func (s *joinStore) submitTemporary(device, osName string) (joinRecord, string, 
 		return joinRecord{}, "", errors.New("temporary device ID must begin with temp-")
 	}
 	id, err := joinRandom("join_")
-	if err != nil { return joinRecord{}, "", err }
+	if err != nil {
+		return joinRecord{}, "", err
+	}
 	ticket, err := joinRandom("join_secret_")
-	if err != nil { return joinRecord{}, "", err }
+	if err != nil {
+		return joinRecord{}, "", err
+	}
 	now := time.Now().UTC()
 	rec := joinRecord{ID: id, DeviceID: device, OS: osName, State: "pending", Mode: "temporary", TicketHash: ticketHash(ticket), RequestedAt: now, ExpiresAt: now.Add(temporaryPendingTTL)}
 	s.mu.Lock()
@@ -182,17 +187,25 @@ func (s *joinStore) submitTemporary(device, osName string) (joinRecord, string, 
 		}
 	}
 	next := make(map[string]joinRecord, len(s.records)+1)
-	for k,v := range s.records { next[k]=v }
-	next[id]=rec
-	if err := s.save(next); err != nil { return joinRecord{}, "", err }
-	rec.TicketHash=""
-	return rec,ticket,nil
+	for k, v := range s.records {
+		next[k] = v
+	}
+	next[id] = rec
+	if err := s.save(next); err != nil {
+		return joinRecord{}, "", err
+	}
+	rec.TicketHash = ""
+	return rec, ticket, nil
 }
 
 func (s *joinStore) revokeTemporary(id string) (joinRecord, error) {
 	return s.apply(id, func(rec *joinRecord) error {
-		if rec.Mode != "temporary" { return errors.New("request is not temporary") }
-		if rec.State != "revoked" { rec.State = "revoked" }
+		if rec.Mode != "temporary" {
+			return errors.New("request is not temporary")
+		}
+		if rec.State != "revoked" {
+			rec.State = "revoked"
+		}
 		return nil
 	})
 }
@@ -206,19 +219,25 @@ func (s *joinStore) claim(device, ticket string) (joinRecord, error) {
 	defer s.mu.Unlock()
 	now := time.Now().UTC()
 	for id, rec := range s.records {
-		if rec.DeviceID != device || rec.State != "approved" || !equalHash(rec.TicketHash,digest) { continue }
+		if rec.DeviceID != device || rec.State != "approved" || !equalHash(rec.TicketHash, digest) {
+			continue
+		}
 		if rec.Mode == "temporary" {
 			if !now.Before(rec.ExpiresAt) || !rec.UsedAt.IsZero() {
 				return joinRecord{}, errors.New("temporary session expired or already consumed")
 			}
-			rec.UsedAt=now
-			next := make(map[string]joinRecord,len(s.records))
-			for k,v := range s.records { next[k]=v }
-			next[id]=rec
-			if err:=s.save(next); err!=nil {return joinRecord{},err}
+			rec.UsedAt = now
+			next := make(map[string]joinRecord, len(s.records))
+			for k, v := range s.records {
+				next[k] = v
+			}
+			next[id] = rec
+			if err := s.save(next); err != nil {
+				return joinRecord{}, err
+			}
 		}
-		rec.TicketHash=""
-		return rec,nil
+		rec.TicketHash = ""
+		return rec, nil
 	}
 	return joinRecord{}, errors.New("credential not approved")
 }
@@ -244,7 +263,9 @@ func (s *joinStore) decide(id string, approve bool) (joinRecord, error) {
 	if current.State != "pending" {
 		return joinRecord{}, errors.New("request already decided")
 	}
-	if current.Mode == "temporary" && !time.Now().Before(current.ExpiresAt) { return joinRecord{}, errors.New("temporary join request expired") }
+	if current.Mode == "temporary" && !time.Now().Before(current.ExpiresAt) {
+		return joinRecord{}, errors.New("temporary join request expired")
+	}
 	next := make(map[string]joinRecord, len(s.records))
 	for k, v := range s.records {
 		if approve && k != id && v.DeviceID == current.DeviceID && v.State == "approved" {
@@ -254,7 +275,9 @@ func (s *joinStore) decide(id string, approve bool) (joinRecord, error) {
 	}
 	if approve {
 		current.State = "approved"
-		if current.Mode == "temporary" { current.ExpiresAt=time.Now().UTC().Add(temporarySessionTTL) }
+		if current.Mode == "temporary" {
+			current.ExpiresAt = time.Now().UTC().Add(temporarySessionTTL)
+		}
 	} else {
 		current.State = "rejected"
 	}
@@ -272,7 +295,9 @@ func (s *joinStore) status(id, ticket string) (joinRecord, error) {
 	if !ok || len(ticket) < 32 || !equalHash(rec.TicketHash, ticketHash(ticket)) {
 		return joinRecord{}, errors.New("unknown request or ticket")
 	}
-	if rec.Mode == "temporary" && !time.Now().Before(rec.ExpiresAt) { rec.State="expired" }
+	if rec.Mode == "temporary" && !time.Now().Before(rec.ExpiresAt) {
+		rec.State = "expired"
+	}
 	rec.TicketHash = ""
 	return rec, nil
 }
@@ -373,10 +398,12 @@ func registerJoinTools(server *mcp.Server, s *joinStore, h *hub) {
 		return result(map[string]string{"request_id": rec.ID, "device_id": rec.DeviceID, "state": rec.State}, false), nil, nil
 	})
 	mcp.AddTool(server, &mcp.Tool{Name: "revoke_temporary_session", Description: "Immediately revoke a temporary support session by request ID, disconnect its Agent, and invalidate its ticket."}, func(_ context.Context, _ *mcp.CallToolRequest, args joinAction) (*mcp.CallToolResult, any, error) {
-		rec,err:=s.revokeTemporary(args.RequestID)
-		if err!=nil { return result(map[string]string{"error":err.Error()},true),nil,nil }
+		rec, err := s.revokeTemporary(args.RequestID)
+		if err != nil {
+			return result(map[string]string{"error": err.Error()}, true), nil, nil
+		}
 		h.dropTemporary(rec.ID)
-		return result(map[string]any{"request_id":rec.ID,"device_id":rec.DeviceID,"state":rec.State},false),nil,nil
+		return result(map[string]any{"request_id": rec.ID, "device_id": rec.DeviceID, "state": rec.State}, false), nil, nil
 	})
 	mcp.AddTool(server, &mcp.Tool{Name: "reject_join_request", Description: "Reject a pending device request."}, func(_ context.Context, _ *mcp.CallToolRequest, args joinAction) (*mcp.CallToolResult, any, error) {
 		rec, err := s.decide(args.RequestID, false)

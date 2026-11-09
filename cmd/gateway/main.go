@@ -47,15 +47,15 @@ func bearer(r *http.Request, token string) bool {
 }
 
 type agent struct {
-	id, os    string
-	conn      *websocket.Conn
-	writeMu   sync.Mutex
-	busyMu    sync.Mutex
-	busy      bool
-	connected time.Time
-	temporaryID string
+	id, os             string
+	conn               *websocket.Conn
+	writeMu            sync.Mutex
+	busyMu             sync.Mutex
+	busy               bool
+	connected          time.Time
+	temporaryID        string
 	temporaryExpiresAt time.Time
-	revoked bool // protected by hub.mu
+	revoked            bool // protected by hub.mu
 
 	// Guarded by hub.mu; snapshot availability is from last observation.
 	capabilities []capability.Status
@@ -123,6 +123,7 @@ func (h *hub) remove(a *agent) {
 	h.mu.Unlock()
 	log.Printf("agent disconnected id=%s", a.id)
 }
+
 // dropTemporary stops an approved guest session without affecting long-lived devices.
 func (h *hub) dropTemporary(requestID string) {
 	h.mu.Lock()
@@ -149,7 +150,10 @@ func (h *hub) list() []map[string]any {
 		if a := h.agents[id]; a != nil {
 			item["online"] = true
 			item["connected_at"] = a.connected.UTC().Format(time.RFC3339)
-			if a.temporaryID != "" { item["temporary_request_id"] = a.temporaryID; item["expires_at"] = a.temporaryExpiresAt.UTC().Format(time.RFC3339) }
+			if a.temporaryID != "" {
+				item["temporary_request_id"] = a.temporaryID
+				item["expires_at"] = a.temporaryExpiresAt.UTC().Format(time.RFC3339)
+			}
 			item["capabilities"] = append([]capability.Status(nil), a.capabilities...)
 			item["capabilities_observed_at"] = a.capObserved.UTC().Format(time.RFC3339Nano)
 		}
@@ -244,7 +248,9 @@ func (h *hub) dispatch(ctx context.Context, deviceID string, request wire.Envelo
 	h.mu.Lock()
 	disallowed := a.revoked || (a.temporaryID != "" && !time.Now().Before(a.temporaryExpiresAt))
 	h.mu.Unlock()
-	if disallowed { return wire.Envelope{}, errors.New("temporary session ended") }
+	if disallowed {
+		return wire.Envelope{}, errors.New("temporary session ended")
+	}
 	if request.Type == "capture_screen" && (!hasCap || !capStatus.Supported) {
 		code := capability.Unsupported
 		if hasCap && capStatus.Reason != "" {
@@ -325,9 +331,15 @@ func (h *hub) serveAgent(w http.ResponseWriter, r *http.Request, token string, j
 	}
 	var authorization joinRecord
 	if !legacy {
-		if joins == nil { _ = c.Close(websocket.StatusPolicyViolation, "device not approved"); return }
+		if joins == nil {
+			_ = c.Close(websocket.StatusPolicyViolation, "device not approved")
+			return
+		}
 		authorization, err = joins.claim(hello.DeviceID, incoming)
-		if err != nil { _ = c.Close(websocket.StatusPolicyViolation, "device not approved"); return }
+		if err != nil {
+			_ = c.Close(websocket.StatusPolicyViolation, "device not approved")
+			return
+		}
 	}
 	now := time.Now()
 	a := &agent{id: hello.DeviceID, os: hello.OS, conn: c, connected: now, capabilities: statuses, capObserved: now}

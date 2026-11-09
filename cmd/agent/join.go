@@ -114,7 +114,9 @@ func joinMain(args []string) error {
 	if err != nil {
 		return err
 	}
-	if *temporary { return joinTemporary(ws, *device) }
+	if *temporary {
+		return joinTemporary(ws, *device)
+	}
 	path, err := joinFile(*device)
 	if err != nil {
 		return err
