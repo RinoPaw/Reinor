@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"unicode/utf8"
 	"time"
 
 	"github.com/RinoPaw/Reinor/internal/capability"
@@ -392,7 +394,30 @@ func (h *hub) serveAgent(w http.ResponseWriter, r *http.Request, token string, j
 type noArgs struct{}
 type execArgs struct {
 	DeviceID string `json:"device_id" jsonschema:"Device ID from list_devices"`
-	Command  string `json:"command" jsonschema:"PowerShell command to execute"`
+	Command  string `json:"command" jsonschema:"Native shell command, or standard Base64-encoded UTF-8 command when base64 is true"`
+	Base64   bool   `json:"base64,omitempty" jsonschema:"Decode the command as standard RFC 4648 Base64 UTF-8 before execution; defaults to false, does not change privileges"`
+}
+
+// decodeExecuteCommand operates before dispatch, so both input forms share
+// the same 4096-byte decoded command limit and Agent execution semantics.
+func decodeExecuteCommand(args execArgs) (string, error) {
+	if !args.Base64 {
+		return args.Command, nil
+	}
+	if len(args.Command) == 0 || len(args.Command) > base64.StdEncoding.EncodedLen(4096) {
+		return "", errors.New("invalid Base64 command length")
+	}
+	decoded, err := base64.StdEncoding.Strict().DecodeString(args.Command)
+	if err != nil {
+		return "", errors.New("invalid Base64 command")
+	}
+	if len(decoded) == 0 || len(decoded) > 4096 {
+		return "", errors.New("invalid command")
+	}
+	if !utf8.Valid(decoded) || strings.ContainsRune(string(decoded), '\x00') {
+		return "", errors.New("decoded command must contain valid UTF-8 without NUL")
+	}
+	return string(decoded), nil
 }
 type deviceArgs struct {
 	DeviceID string `json:"device_id" jsonschema:"Device ID from list_devices"`
@@ -426,8 +451,12 @@ func main() {
 			"observed_at":  observed.Format(time.RFC3339Nano),
 		}, false), nil, nil
 	})
-	mcp.AddTool(m, &mcp.Tool{Name: "execute_command", Description: "Run a native OS shell command (PowerShell on Windows, /bin/sh on Linux) on an online device. May change files or system state."}, func(ctx context.Context, req *mcp.CallToolRequest, args execArgs) (*mcp.CallToolResult, any, error) {
-		r, err := h.execute(ctx, args.DeviceID, args.Command, 20*time.Second)
+	mcp.AddTool(m, &mcp.Tool{Name: "execute_command", Description: "Run a native OS shell command (PowerShell on Windows, /bin/sh on Linux) on an online device. May change files or system state. Optional base64=true decodes standard Base64 UTF-8 command text; the command still has full execution privileges."}, func(ctx context.Context, req *mcp.CallToolRequest, args execArgs) (*mcp.CallToolResult, any, error) {
+		command, err := decodeExecuteCommand(args)
+		if err != nil {
+			return result(map[string]string{"error": err.Error()}, true), nil, nil
+		}
+		r, err := h.execute(ctx, args.DeviceID, command, 20*time.Second)
 		if err != nil {
 			return result(map[string]string{"error": err.Error()}, true), nil, nil
 		}
