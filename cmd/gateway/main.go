@@ -15,8 +15,8 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"unicode/utf8"
 	"time"
+	"unicode/utf8"
 
 	"github.com/RinoPaw/Reinor/internal/capability"
 	"github.com/RinoPaw/Reinor/internal/oauthlocal"
@@ -419,6 +419,7 @@ func decodeExecuteCommand(args execArgs) (string, error) {
 	}
 	return string(decoded), nil
 }
+
 type deviceArgs struct {
 	DeviceID string `json:"device_id" jsonschema:"Device ID from list_devices"`
 }
