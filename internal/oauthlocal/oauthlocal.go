@@ -12,6 +12,7 @@ import (
  "html"
  "io"
  "net/http"
+ "net"
  "net/url"
  "os"
  "path/filepath"
@@ -96,10 +97,18 @@ func jsonReply(w http.ResponseWriter,status int,value any){
 func oauthError(w http.ResponseWriter,status int,code string){
  jsonReply(w,status,map[string]string{"error":code})
 }
-func validCallback(raw string)bool{
+// validCallback accepts standards-compliant web and native loopback callbacks
+// for any MCP client. Authorization still uses exact registered URI matching.
+func validCallback(raw string) bool {
+ if len(raw)==0||len(raw)>2048||strings.ContainsAny(raw,"\\\r\n\t"){return false}
  u,err:=url.Parse(raw)
- if err!=nil||u.Scheme!="https"||u.Host!="chatgpt.com"||u.User!=nil||u.RawQuery!=""||u.Fragment!="" {return false}
- return u.Path=="/connector_platform_oauth_redirect"||strings.HasPrefix(u.Path,"/connector/oauth/")
+ if err!=nil||u.Hostname()==""||u.User!=nil||u.Fragment!=""||u.RawFragment!=""||u.Opaque!=""||strings.Contains(u.Host,"*"){return false}
+ if u.Scheme=="https"{return true}
+ if u.Scheme!="http"{return false}
+ host:=u.Hostname()
+ if strings.EqualFold(host,"localhost"){return true}
+ ip:=net.ParseIP(host)
+ return ip!=nil&&ip.IsLoopback()
 }
 func (s *Server)Register(w http.ResponseWriter,r *http.Request){
  if r.Method!=http.MethodPost{oauthError(w,405,"invalid_request");return}
@@ -163,7 +172,7 @@ func showAuthorized(w http.ResponseWriter,callbackURL string){
  w.Header().Set("Referrer-Policy","no-referrer")
  w.Header().Set("Content-Security-Policy","default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'")
  address:=html.EscapeString(callbackURL)
- _,_=io.WriteString(w,"<!doctype html><html lang='zh-CN'><meta charset='utf-8'><meta name='viewport' content='width=device-width'><meta http-equiv='refresh' content='1;url="+address+"'><title>Reinor 授权成功</title><style>body{font:16px system-ui,sans-serif;max-width:440px;margin:8vh auto;padding:20px;color:#222}a{display:block;text-align:center;padding:14px;background:#1769c2;color:white;border-radius:6px;text-decoration:none;margin-top:18px}</style><h2>已授权 ChatGPT</h2><p>正在返回 ChatGPT。如果浏览器没有自动跳转，请点击下面的按钮。</p><a rel='noreferrer' href='"+address+"'>返回 ChatGPT 完成连接</a><p>请勿分享此页面的跳转地址。</p></html>")
+ _,_=io.WriteString(w,"<!doctype html><html lang='zh-CN'><meta charset='utf-8'><meta name='viewport' content='width=device-width'><meta http-equiv='refresh' content='1;url="+address+"'><title>Reinor 授权成功</title><style>body{font:16px system-ui,sans-serif;max-width:440px;margin:8vh auto;padding:20px;color:#222}a{display:block;text-align:center;padding:14px;background:#1769c2;color:white;border-radius:6px;text-decoration:none;margin-top:18px}</style><h2>已授权 MCP 客户端</h2><p>正在返回客户端。如果浏览器没有自动跳转，请点击下面的按钮。</p><a rel='noreferrer' href='"+address+"'>返回客户端完成连接</a><p>请勿分享此页面的跳转地址。</p></html>")
 }
 
 func (s *Server)Authorize(w http.ResponseWriter,r *http.Request){
@@ -189,7 +198,9 @@ func (s *Server)Authorize(w http.ResponseWriter,r *http.Request){
   w.Header().Set("Content-Type","text/html; charset=utf-8")
   w.Header().Set("Cache-Control","no-store")
   w.Header().Set("Content-Security-Policy","default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'")
-  _,_=io.WriteString(w,`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Reinor 登录</title><style>body{font:16px system-ui,sans-serif;max-width:440px;margin:8vh auto;padding:20px;color:#222}input,button{font:inherit;padding:12px;box-sizing:border-box;width:100%;margin-top:12px}button{background:#1769c2;color:white;border:0;border-radius:6px;cursor:pointer}</style><h2>授权 ChatGPT 连接 Reinor</h2><p>输入腾讯云上保存的 Gateway 控制令牌，允许 ChatGPT 使用设备查询、审批和命令执行。</p><form method="post" action="/authorize"><input type="hidden" name="request_id" value="`+html.EscapeString(requestID)+`"><input type="password" name="owner_token" placeholder="Gateway 控制令牌" autocomplete="off" required><button type="submit">授权连接</button></form><p>授权后将返回 ChatGPT。</p></html>`)
+  clientName:=client.Name
+  if clientName==""{clientName="未命名 MCP 客户端"}
+  _,_=io.WriteString(w,`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Reinor 登录</title><style>body{font:16px system-ui,sans-serif;max-width:480px;margin:8vh auto;padding:20px;color:#222;overflow-wrap:anywhere}input,button{font:inherit;padding:12px;box-sizing:border-box;width:100%;margin-top:12px}button{background:#1769c2;color:white;border:0;border-radius:6px;cursor:pointer}</style><h2>授权 MCP 客户端连接 Reinor</h2><p>申请的客户端名称（未经验证）：<strong>`+html.EscapeString(clientName)+`</strong></p><p>授权码回调地址：<code>`+html.EscapeString(redirect)+`</code></p><p>确认客户端及回调地址可信后，输入 Gateway 控制令牌。授权会允许该客户端查询设备、审批连接及执行命令。</p><form method="post" action="/authorize"><input type="hidden" name="request_id" value="`+html.EscapeString(requestID)+`"><input type="password" name="owner_token" placeholder="Gateway 控制令牌" autocomplete="off" required><button type="submit">授权连接</button></form><p>授权后将返回该客户端。</p></html>`)
  case http.MethodPost:
   r.Body=http.MaxBytesReader(w,r.Body,8192)
   if err:=r.ParseForm();err!=nil{http.Error(w,"Invalid request",400);return}
@@ -211,12 +222,12 @@ func (s *Server)Authorize(w http.ResponseWriter,r *http.Request){
   authorization,ok:=s.authorizations[id]
   if !ok||now.After(authorization.Expires){
    s.mu.Unlock()
-   http.Error(w,"Authorization request expired. Return to ChatGPT and start a new connection attempt.",400)
+   http.Error(w,"Authorization request expired. Return to your MCP client and start a new connection attempt.",400)
    return
   }
   if subtle.ConstantTimeCompare([]byte(received),s.owner)!=1{
    s.mu.Unlock()
-   http.Error(w,"Invalid owner token. Return to ChatGPT and retry authorization.",401)
+   http.Error(w,"Invalid owner token. Return to your MCP client and retry authorization.",401)
    return
   }
   code,err:=random("code_")
