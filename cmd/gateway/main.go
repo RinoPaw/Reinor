@@ -53,6 +53,9 @@ type agent struct {
 	busyMu    sync.Mutex
 	busy      bool
 	connected time.Time
+	temporaryID string
+	temporaryExpiresAt time.Time
+	revoked bool // protected by hub.mu
 
 	// Guarded by hub.mu; snapshot availability is from last observation.
 	capabilities []capability.Status
@@ -120,6 +123,23 @@ func (h *hub) remove(a *agent) {
 	h.mu.Unlock()
 	log.Printf("agent disconnected id=%s", a.id)
 }
+// dropTemporary stops an approved guest session without affecting long-lived devices.
+func (h *hub) dropTemporary(requestID string) {
+	h.mu.Lock()
+	var victims []*agent
+	for id, a := range h.agents {
+		if a.temporaryID == requestID {
+			a.revoked = true
+			delete(h.agents, id)
+			victims = append(victims, a)
+		}
+	}
+	h.mu.Unlock()
+	for _, a := range victims {
+		_ = a.conn.Close(websocket.StatusPolicyViolation, "temporary session ended")
+	}
+}
+
 func (h *hub) list() []map[string]any {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -129,6 +149,7 @@ func (h *hub) list() []map[string]any {
 		if a := h.agents[id]; a != nil {
 			item["online"] = true
 			item["connected_at"] = a.connected.UTC().Format(time.RFC3339)
+			if a.temporaryID != "" { item["temporary_request_id"] = a.temporaryID; item["expires_at"] = a.temporaryExpiresAt.UTC().Format(time.RFC3339) }
 			item["capabilities"] = append([]capability.Status(nil), a.capabilities...)
 			item["capabilities_observed_at"] = a.capObserved.UTC().Format(time.RFC3339Nano)
 		}
@@ -220,6 +241,10 @@ func (h *hub) dispatch(ctx context.Context, deviceID string, request wire.Envelo
 	if a == nil {
 		return wire.Envelope{}, errors.New("device offline")
 	}
+	h.mu.Lock()
+	disallowed := a.revoked || (a.temporaryID != "" && !time.Now().Before(a.temporaryExpiresAt))
+	h.mu.Unlock()
+	if disallowed { return wire.Envelope{}, errors.New("temporary session ended") }
 	if request.Type == "capture_screen" && (!hasCap || !capStatus.Supported) {
 		code := capability.Unsupported
 		if hasCap && capStatus.Reason != "" {
@@ -291,19 +316,31 @@ func (h *hub) serveAgent(w http.ResponseWriter, r *http.Request, token string, j
 		_ = c.Close(websocket.StatusPolicyViolation, "invalid hello")
 		return
 	}
-	if !legacy && (joins == nil || !joins.allowed(hello.DeviceID, incoming)) {
-		_ = c.Close(websocket.StatusPolicyViolation, "device not approved")
-		return
-	}
+	// Capability validation must precede consuming a one-use temporary ticket.
+
 	statuses, err := capability.Decode(hello.Capabilities)
 	if err != nil {
 		_ = c.Close(websocket.StatusPolicyViolation, "invalid capability announcement")
 		return
 	}
+	var authorization joinRecord
+	if !legacy {
+		if joins == nil { _ = c.Close(websocket.StatusPolicyViolation, "device not approved"); return }
+		authorization, err = joins.claim(hello.DeviceID, incoming)
+		if err != nil { _ = c.Close(websocket.StatusPolicyViolation, "device not approved"); return }
+	}
 	now := time.Now()
 	a := &agent{id: hello.DeviceID, os: hello.OS, conn: c, connected: now, capabilities: statuses, capObserved: now}
+	if authorization.Mode == "temporary" {
+		a.temporaryID = authorization.ID
+		a.temporaryExpiresAt = authorization.ExpiresAt
+	}
 	h.register(a)
 	defer func() { h.remove(a); _ = c.CloseNow() }()
+	if a.temporaryID != "" {
+		timer := time.AfterFunc(time.Until(a.temporaryExpiresAt), func() { h.dropTemporary(a.temporaryID) })
+		defer timer.Stop()
+	}
 	go func() {
 		tick := time.NewTicker(20 * time.Second)
 		defer tick.Stop()
@@ -430,7 +467,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("open local OAuth: %v", err)
 	}
-	registerJoinTools(m, joins)
+	registerJoinTools(m, joins, h)
 	mux := http.NewServeMux()
 	// Only /mcp is exposed externally. It accepts OAuth access tokens and
 	// preserves the existing owner bearer token for legacy local integrations.
