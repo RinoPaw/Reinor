@@ -64,6 +64,14 @@ The MCP `execute_command` tool accepts an optional boolean `base64` argument, de
 
 This example invokes `Get-Service MySQL80` on Windows. Encoding is only a transport convenience; it does not encrypt, sandbox, anonymize, restrict or change the command's permissions. The tool must continue to be treated as a write-capable remote execution tool, regardless of the flag's value.
 
+## OAuth for third-party MCP clients
+
+Reinor's OAuth server supports dynamic registration for **any MCP client** with an HTTPS callback URI, including Gemini's `https://oauth-redirect.googleusercontent.com/r/...`, and loopback HTTP callbacks for local native applications. No platform-specific hostname or path allowlist is required.
+
+Registration: `POST https://xuhuaai.top/register` with `redirect_uris` and public-client `token_endpoint_auth_method: "none"`. OAuth authorization always requires the Gateway owner's control token, and the consent page displays the claimed client name and **exact callback URL**. The callback must match the registered URI byte-for-byte. Arbitrary non-TLS remote callbacks, fragments, credentials in URI, and malformed addresses are rejected.
+
+Metadata discovery: `https://xuhuaai.top/.well-known/oauth-authorization-server`, MCP endpoint `https://xuhuaai.top/mcp`. Registration issues a public client ID without a client secret. Google Gemini may present a manual client ID/secret fallback if it does not complete dynamic registration. Do not enter the Gateway owner control token as an OAuth client secret.
+
 ## Operational compatibility
 
 The live deployment (as of 2026-10-29) uses `https://xuhuaai.top/mcp` as its authenticated MCP endpoint and `wss://xuhuaai.top/agent/ws` for outbound device Agent connections. These are configurable application endpoints at the hosting/proxy level; the MVP OAuth issuer currently defaults to this public domain. Moving Reinor source to a separate repository **does not** change the running Gateway or its enrolled Windows Agent automatically.
