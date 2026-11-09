@@ -432,6 +432,20 @@ func result(content any, isError bool) *mcp.CallToolResult {
 	b, _ := json.Marshal(content)
 	return &mcp.CallToolResult{IsError: isError, Content: []mcp.Content{&mcp.TextContent{Text: string(b)}}}
 }
+func registerExecuteTool(m *mcp.Server, h *hub) {
+	mcp.AddTool(m, &mcp.Tool{Name: "execute_command", Description: "Run a native OS shell command (PowerShell on Windows, /bin/sh on Linux) on an online device. May change files or system state. Optional base64=true decodes standard Base64 UTF-8 command text; the command still has full execution privileges."}, func(ctx context.Context, req *mcp.CallToolRequest, args execArgs) (*mcp.CallToolResult, any, error) {
+		command, err := decodeExecuteCommand(args)
+		if err != nil {
+			return result(map[string]string{"error": err.Error()}, true), nil, nil
+		}
+		r, err := h.execute(ctx, args.DeviceID, command, 20*time.Second)
+		if err != nil {
+			return result(map[string]string{"error": err.Error()}, true), nil, nil
+		}
+		return result(map[string]any{"task_id": r.TaskID, "device_id": args.DeviceID, "exit_code": r.ExitCode, "stdout": string(r.Stdout), "stderr": string(r.Stderr), "error": r.Error}, r.Error != ""), nil, nil
+	})
+}
+
 func main() {
 	agentToken := loadSecret("RINOMESH_AGENT_TOKEN_FILE")
 	controlToken := loadSecret("RINOMESH_CONTROL_TOKEN_FILE")
@@ -451,17 +465,7 @@ func main() {
 			"observed_at":  observed.Format(time.RFC3339Nano),
 		}, false), nil, nil
 	})
-	mcp.AddTool(m, &mcp.Tool{Name: "execute_command", Description: "Run a native OS shell command (PowerShell on Windows, /bin/sh on Linux) on an online device. May change files or system state. Optional base64=true decodes standard Base64 UTF-8 command text; the command still has full execution privileges."}, func(ctx context.Context, req *mcp.CallToolRequest, args execArgs) (*mcp.CallToolResult, any, error) {
-		command, err := decodeExecuteCommand(args)
-		if err != nil {
-			return result(map[string]string{"error": err.Error()}, true), nil, nil
-		}
-		r, err := h.execute(ctx, args.DeviceID, command, 20*time.Second)
-		if err != nil {
-			return result(map[string]string{"error": err.Error()}, true), nil, nil
-		}
-		return result(map[string]any{"task_id": r.TaskID, "device_id": args.DeviceID, "exit_code": r.ExitCode, "stdout": string(r.Stdout), "stderr": string(r.Stderr), "error": r.Error}, r.Error != ""), nil, nil
-	})
+	registerExecuteTool(m, h)
 	mcp.AddTool(m, &mcp.Tool{Name: "capture_screen", Description: "Capture an explicitly owner-authorized interactive desktop on a device advertising desktop.capture. Returns JPEG and physical-pixel geometry; a headless device returns a structured unavailable error."}, func(ctx context.Context, req *mcp.CallToolRequest, args captureArgs) (*mcp.CallToolResult, any, error) {
 		r, err := h.capture(ctx, args.DeviceID, args.MaxWidth, args.Quality, 20*time.Second)
 		if err != nil {
