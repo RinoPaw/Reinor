@@ -70,7 +70,9 @@ func agentShellCommand(ctx context.Context, command string) *exec.Cmd {
 	return exec.CommandContext(ctx, "/bin/sh", "-c", command)
 }
 
-func execute(f wire.Envelope) wire.Envelope {
+func execute(f wire.Envelope) wire.Envelope { return executeWithContext(context.Background(), f) }
+
+func executeWithContext(parent context.Context, f wire.Envelope) wire.Envelope {
 	reply := wire.Envelope{Type: "result", TaskID: f.TaskID}
 	if len(f.Command) == 0 || len(f.Command) > 4096 {
 		reply.Error = "invalid command"
@@ -80,7 +82,7 @@ func execute(f wire.Envelope) wire.Envelope {
 	if ms < 1000 || ms > 20000 {
 		ms = 20000
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(ms)*time.Millisecond)
+	ctx, cancel := context.WithTimeout(parent, time.Duration(ms)*time.Millisecond)
 	defer cancel()
 	cmd := agentShellCommand(ctx, f.Command)
 	cmd.WaitDelay = 2 * time.Second
@@ -202,7 +204,7 @@ func session(parent context.Context, url, id, token string) error {
 				case "get_capabilities":
 					reply = capabilitySnapshot(f.TaskID)
 				default:
-					reply = execute(f)
+					reply = executeWithContext(connection, f)
 				}
 				if err := send(reply); err != nil {
 					log.Printf("send result: %v", err)
