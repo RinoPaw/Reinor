@@ -405,10 +405,15 @@ func registerJoinTools(server *mcp.Server, s *joinStore, h *hub) {
 		h.dropTemporary(rec.ID)
 		return result(map[string]any{"request_id": rec.ID, "device_id": rec.DeviceID, "state": rec.State}, false), nil, nil
 	})
-	mcp.AddTool(server, &mcp.Tool{Name: "reject_join_request", Description: "Reject a pending device request."}, func(_ context.Context, _ *mcp.CallToolRequest, args joinAction) (*mcp.CallToolResult, any, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "reject_join_request", Description: "Reject a pending request, or revoke an approved temporary session for clients that have not refreshed their tool list."}, func(_ context.Context, _ *mcp.CallToolRequest, args joinAction) (*mcp.CallToolResult, any, error) {
 		rec, err := s.decide(args.RequestID, false)
 		if err != nil {
-			return result(map[string]string{"error": err.Error()}, true), nil, nil
+			originalErr := err
+			rec, err = s.revokeTemporary(args.RequestID)
+			if err != nil {
+				return result(map[string]string{"error": originalErr.Error()}, true), nil, nil
+			}
+			h.dropTemporary(rec.ID)
 		}
 		return result(map[string]string{"request_id": rec.ID, "device_id": rec.DeviceID, "state": rec.State}, false), nil, nil
 	})
