@@ -46,6 +46,10 @@ GOOS=linux GOARCH=amd64 go build -o reinor-agent-linux ./cmd/agent
 
 `go build ./cmd/gateway` builds a local binary; do not commit it. The project requires no Yggdrasil daemon or kernel networking features to compile or test.
 
+## One-time support for a friend's computer
+
+The Agent supports `join -temporary -device temp-friend-mysql`. Temporary requests require explicit approval, have a 10-minute pending window and a 60-minute approved lifetime, and consume the ticket after the first connection. The friend closes the Agent to stop remote commands; the operator can also call `revoke_temporary_session(request_id)` to invalidate the ticket and disconnect immediately. No enrollment file or startup service is created. See [temporary support security and workflow](docs/temporary-support.md). Existing permanent Agent enrollment remains unchanged.
+
 ## Operational compatibility
 
 The live deployment (as of 2026-10-29) uses `https://xuhuaai.top/mcp` as its authenticated MCP endpoint and `wss://xuhuaai.top/agent/ws` for outbound device Agent connections. These are configurable application endpoints at the hosting/proxy level; the MVP OAuth issuer currently defaults to this public domain. Moving Reinor source to a separate repository **does not** change the running Gateway or its enrolled Windows Agent automatically.
