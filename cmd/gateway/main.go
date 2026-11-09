@@ -136,7 +136,7 @@ func (h *hub) dropTemporary(requestID string) {
 	}
 	h.mu.Unlock()
 	for _, a := range victims {
-		_ = a.conn.Close(websocket.StatusPolicyViolation, "temporary session ended")
+		_ = a.conn.CloseNow() // drop transport immediately; Close handshake can wait 5 seconds
 	}
 }
 
