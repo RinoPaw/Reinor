@@ -97,9 +97,9 @@ func TestOAuthRejectsUnknownRedirectAndWrongPassword(t *testing.T){
  s,err:=New(strings.Repeat("x",48),filepath.Join(t.TempDir(),"clients.json"));if err!=nil{t.Fatal(err)}
  mux:=http.NewServeMux();s.InstallRoutes(mux)
  server:=httptest.NewServer(mux);defer server.Close()
- bad:=`{"redirect_uris":["https://evil.example/callback"],"token_endpoint_auth_method":"none"}`
+ bad:=`{"redirect_uris":["http://external.example/callback"],"token_endpoint_auth_method":"none"}`
  res,err:=http.Post(server.URL+"/register","application/json",strings.NewReader(bad));if err!=nil{t.Fatal(err)}
  res.Body.Close()
- if res.StatusCode!=400{t.Fatal("accepted attacker redirect")}
+ if res.StatusCode!=400{t.Fatal("accepted non-TLS remote redirect")}
  if s.ValidAccess("garbage"){t.Fatal("accepted random token")}
 }
