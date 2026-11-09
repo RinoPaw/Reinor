@@ -50,6 +50,20 @@ GOOS=linux GOARCH=amd64 go build -o reinor-agent-linux ./cmd/agent
 
 The Agent supports `join -temporary -device temp-friend-mysql`. Temporary requests require explicit approval, have a 10-minute pending window and a 60-minute approved lifetime, and consume the ticket after the first connection. The friend closes the Agent to stop remote commands; the operator can also call `revoke_temporary_session(request_id)` to invalidate the ticket and disconnect immediately. No enrollment file or startup service is created. See [temporary support security and workflow](docs/temporary-support.md). Existing permanent Agent enrollment remains unchanged.
 
+## Optional Base64 command text
+
+The MCP `execute_command` tool accepts an optional boolean `base64` argument, defaulting to `false`. When enabled, `command` must be standard (padded) RFC 4648 Base64 encoding of a UTF-8 native shell command. Gateway decodes it before normal validation and dispatch. The decoded command must be at most 4096 bytes, and invalid Base64, malformed UTF-8, and NUL bytes are rejected.
+
+```json
+{
+  "device_id": "rino-pc-joined",
+  "command": "R2V0LVNlcnZpY2UgTXlTUUw4MA==",
+  "base64": true
+}
+```
+
+This example invokes `Get-Service MySQL80` on Windows. Encoding is only a transport convenience; it does not encrypt, sandbox, anonymize, restrict or change the command's permissions. The tool must continue to be treated as a write-capable remote execution tool, regardless of the flag's value.
+
 ## Operational compatibility
 
 The live deployment (as of 2026-10-29) uses `https://xuhuaai.top/mcp` as its authenticated MCP endpoint and `wss://xuhuaai.top/agent/ws` for outbound device Agent connections. These are configurable application endpoints at the hosting/proxy level; the MVP OAuth issuer currently defaults to this public domain. Moving Reinor source to a separate repository **does not** change the running Gateway or its enrolled Windows Agent automatically.
