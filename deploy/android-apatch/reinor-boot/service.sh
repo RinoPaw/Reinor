@@ -36,7 +36,10 @@ mkdir "$MONITOR_LOCK" 2>/dev/null || exit 0
         if [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt 1048576 ]; then
             mv "$LOG" "$LOG.previous"
         fi
-        /system/bin/su shell -c "cd '$DATA_DIR' && HOME='$DATA_DIR' TMPDIR='$DATA_DIR' exec '$BIN' join -device '$DEVICE_ID'" >> "$LOG" 2>&1
+        # AID_INET (3003) is needed by unprivileged Android processes for
+        # network access, including bionic DNS. APatch's su shell does not
+        # automatically preserve ADB shell's supplementary groups.
+        /system/bin/su -g 2000 -G 3003 shell -c "cd '$DATA_DIR' && HOME='$DATA_DIR' TMPDIR='$DATA_DIR' exec '$BIN' join -device '$DEVICE_ID'" >> "$LOG" 2>&1
         sleep 8
     done
 ) </dev/null >/dev/null 2>&1 &
