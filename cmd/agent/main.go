@@ -63,11 +63,25 @@ func exitCode(err error) int32 {
 
 // agentShellCommand selects the native shell for the enrolled device OS.
 // Gateway authentication and command deadlines are enforced by the caller.
-func agentShellCommand(ctx context.Context, command string) *exec.Cmd {
-	if runtime.GOOS == "windows" {
-		return exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command)
+// shellExecutableForOS chooses an OS-native shell. Termux has its own
+// prefix, so /system/bin/sh is a stable absolute path for Android.
+func shellExecutableForOS(goos string) string {
+	switch goos {
+	case "windows":
+		return "powershell.exe"
+	case "android":
+		return "/system/bin/sh"
+	default:
+		return "/bin/sh"
 	}
-	return exec.CommandContext(ctx, "/bin/sh", "-c", command)
+}
+
+func agentShellCommand(ctx context.Context, command string) *exec.Cmd {
+	shell := shellExecutableForOS(runtime.GOOS)
+	if runtime.GOOS == "windows" {
+		return exec.CommandContext(ctx, shell, "-NoProfile", "-NonInteractive", "-Command", command)
+	}
+	return exec.CommandContext(ctx, shell, "-c", command)
 }
 
 func execute(f wire.Envelope) wire.Envelope { return executeWithContext(context.Background(), f) }
