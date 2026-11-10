@@ -34,9 +34,24 @@ The shipped `agent.conf` is specific to `rino-oppo-backup`. Change
 `DEVICE_ID` and `DATA_DIR` for another phone before installing. Test the
 binary and owner-approved join in a normal user shell before adding autostart.
 
+## Verified v0.2 module package
+
+Download: `https://xuhuaai.top/downloads/reinor/reinor-boot-oppo-apatch-v0.2.zip`
+
+SHA-256: `24ef843bc93408503fc7bfd82a313a568cc0bc89e1d3770adc1977aed335e04a`
+(1,849 bytes, no agent binary or credential inside).
+
+The boot supervisor uses the APatch shell identity plus supplementary group
+`AID_INET` (3003). Without that group, the long-lived boot-launched Agent
+repeatedly failed DNS despite normal Wi-Fi and a valid enrollment. The Action
+entrypoint uses BusyBox `setsid` and closed standard streams, avoiding hung
+remote calls. APatch may retain effective Linux capabilities even with
+`uid=2000(shell)`; explicit `su -c` is also available on the test phone.
+Treat this as a **root-capable remote endpoint**, including its API permissions.
+
 ## Cable-free installation on an already enrolled OPPO
 
-1. Download the verified `reinor-boot-oppo-apatch.zip` to OPPO via its browser.
+1. Download the verified `reinor-boot-oppo-apatch-v0.2.zip` to OPPO via its browser or, if the Agent is already connected, retrieve it through its remote shell.
 2. In APatch Manager choose **Modules → Install from storage** and select the
    ZIP. It includes *no* `join_secret_...` ticket or Gateway owner credential.
 3. Press the module **Action** button to launch the supervisor immediately.
