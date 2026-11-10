@@ -10,14 +10,27 @@ import (
  "github.com/RinoPaw/Reinor/internal/wire"
 )
 
+func TestShellExecutableForOS(t *testing.T) {
+ for _, tc := range []struct{ goos, expected string }{
+  {"windows", "powershell.exe"},
+  {"android", "/system/bin/sh"},
+  {"linux", "/bin/sh"},
+  {"darwin", "/bin/sh"},
+ } {
+  if got := shellExecutableForOS(tc.goos); got != tc.expected {
+   t.Errorf("shell for %s: got %s, want %s", tc.goos, got, tc.expected)
+  }
+ }
+}
+
 func TestAgentShellCommandPlatform(t *testing.T) {
  cmd := agentShellCommand(context.Background(), "echo reinor-shell")
  if runtime.GOOS == "windows" {
   if !strings.HasSuffix(strings.ToLower(cmd.Path), "powershell.exe") {
    t.Fatalf("expected PowerShell on Windows: %s", cmd.Path)
   }
- } else if cmd.Path != "/bin/sh" {
-  t.Fatalf("expected /bin/sh on Unix: %s", cmd.Path)
+ } else if cmd.Path != shellExecutableForOS(runtime.GOOS) {
+  t.Fatalf("expected native shell on %s: got %s", runtime.GOOS, cmd.Path)
  }
 }
 
