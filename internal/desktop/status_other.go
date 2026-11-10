@@ -4,6 +4,7 @@ package desktop
 
 import (
 	"os"
+	"runtime"
 
 	"github.com/RinoPaw/Reinor/internal/capability"
 )
@@ -12,6 +13,10 @@ import (
 // Linux server reports its missing session explicitly; a GUI host can adopt
 // a native backend later without changing the Gateway.
 func probeDesktop() (bool, bool, string) {
+	if runtime.GOOS == "android" {
+		// Android has a display but no native capture implementation here.
+		return false, false, capability.Unsupported
+	}
 	if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
 		return false, false, capability.NoDesktopSession
 	}
