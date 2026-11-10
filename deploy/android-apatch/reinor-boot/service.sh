@@ -6,9 +6,15 @@ CONFIG="$MODDIR/agent.conf"
 . "$CONFIG"
 [ -n "$DEVICE_ID" ] && [ -n "$DATA_DIR" ] || exit 1
 
-# The monitor itself runs under APatch root; every remote command runs with
-# Android shell uid 2000 via /system/bin/su shell, not as root by default.
+# Do not create a second monitor if the APatch Action button is pressed again.
+# /dev is tmpfs, so locks cannot survive a reboot.
+MONITOR_LOCK="/dev/reinor_monitor_${DEVICE_ID}.lock"
+mkdir "$MONITOR_LOCK" 2>/dev/null || exit 0
+
+# The monitor itself runs under APatch root; remote commands run with
+# Android shell uid 2000 via /system/bin/su shell (but su remains available).
 (
+    trap 'rmdir "$MONITOR_LOCK" 2>/dev/null' EXIT HUP INT TERM
     while [ "$(/system/bin/getprop sys.boot_completed)" != "1" ]; do
         sleep 3
     done
