@@ -1,0 +1,6 @@
+id=reinor_boot
+name=Reinor Android Agent Boot
+version=0.1
+versionCode=1
+author=RinoPaw
+description=Start an approved Reinor ARM64 agent after Android boot using the shell UID
