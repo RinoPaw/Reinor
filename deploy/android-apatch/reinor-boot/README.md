@@ -1,7 +1,9 @@
 # APatch boot module for Reinor Android ARM64
 
 This optional APM uses APatch's nonblocking `service.sh` phase to start and
-restart a previously enrolled Android ARM64 Agent after reboot.
+restart a previously enrolled Android ARM64 Agent after reboot. The APatch
+Manager **Action** button runs `action.sh` to start the same monitor immediately,
+without another USB/ADB session or reboot.
 
 - **Privilege:** the APatch startup supervisor is root; the Agent is launched
   with `/system/bin/su shell -c` as UID 2000. The APatch `magisk` SELinux
@@ -17,7 +19,9 @@ restart a previously enrolled Android ARM64 Agent after reboot.
   `DATA_DIR/.config/RinoMesh`, not inside the module or repository.
 - **Availability:** the boot script waits for Android to complete startup,
   runs only if the Agent binary is executable, and restarts it after unexpected
-  termination. The Agent handles network disconnects/reconnects.
+  termination. The Agent handles network disconnects/reconnects. A `/dev`
+  one-monitor lock prevents duplicate supervisors when Action is clicked more
+  than once.
 - **Stop:** create `DATA_DIR/.stop` to inhibit new launches, then stop the
   running Agent if desired. Remove `.stop` to re-enable future starts and
   restart the module supervisor (or reboot).
@@ -28,3 +32,26 @@ restart a previously enrolled Android ARM64 Agent after reboot.
 The shipped `agent.conf` is specific to `rino-oppo-backup`. Change
 `DEVICE_ID` and `DATA_DIR` for another phone before installing. Test the
 binary and owner-approved join in a normal user shell before adding autostart.
+
+## Cable-free installation on an already enrolled OPPO
+
+1. Download the verified `reinor-boot-oppo-apatch.zip` to OPPO via its browser.
+2. In APatch Manager choose **Modules → Install from storage** and select the
+   ZIP. It includes *no* `join_secret_...` ticket or Gateway owner credential.
+3. Press the module **Action** button to launch the supervisor immediately.
+   It reuses the existing credential in
+   `/data/local/tmp/reinor-oppo-backup/.config/RinoMesh/`.
+4. Confirm `list_devices` shows `rino-oppo-backup` online; run `id` and
+   `su -c id` as deliberate diagnostics. Do not reboot until online testing
+   succeeds.
+5. Later, reboot once to verify APatch auto-start (the proof has not been
+   completed just by installing the module).
+
+A phone that has no SIM cannot fall back from Wi-Fi to cellular data.
+An ADB-launched orphan Agent may also die when USB debugging disconnects;
+the APatch root-backed supervisor is designed to recover this situation.
+
+**Warning:** the existing APatch root grant to Android `shell` means commands
+executed by the Agent can elevate via `su -c`. Since the Gateway exposes
+remote execution to connected MCP clients, protect device enrollment,
+the owner's token, and access to connected models accordingly.
