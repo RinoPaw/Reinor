@@ -6,7 +6,8 @@ Manager **Action** button runs `action.sh` to start the same monitor immediately
 without another USB/ADB session or reboot.
 
 - **Privilege:** the APatch startup supervisor is root; the Agent is launched
-  with `/system/bin/su shell -c` as UID 2000. The APatch `magisk` SELinux
+  with `/system/bin/su -g 2000 -G 3003 shell -c` as UID 2000, with
+  Android's AID_INET supplementary group for socket/DNS access. The APatch `magisk` SELinux
   context may differ from an ADB shell. On the test OPPO, even UID 2000 can
   obtain root with `su -c`, so all connected MCP clients have potentially
   root-capable remote command execution. Protect the owner token and use
