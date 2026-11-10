@@ -34,8 +34,13 @@ From **Termux**, install the trusted ARM64 binary in its private home
 directory (do not launch it from shared storage, which can be mounted noexec):
 
 ```sh
+pkg install curl coreutils
 mkdir -p "$HOME/.local/bin"
-# Download a binary from the owner-verified Reinor build, then verify SHA-256.
+curl -fL https://xuhuaai.top/downloads/reinor/reinor-agent-android-arm64 \
+  -o "$HOME/.local/bin/reinor-agent-android-arm64"
+printf '%s  %s\n' \
+  '0197663f3d63b1cb6590f6f180fdb471d381f441341897a0b17efba7767347ea' \
+  "$HOME/.local/bin/reinor-agent-android-arm64" | sha256sum -c -
 chmod 700 "$HOME/.local/bin/reinor-agent-android-arm64"
 "$HOME/.local/bin/reinor-agent-android-arm64" join \
   -gateway https://xuhuaai.top -device rino-marble
@@ -53,6 +58,11 @@ or implied by joining. Do not run the Agent as root unless a separate owner
 decision expressly authorizes it. A persistent session grants command
 execution under the Agent user, so keep the enrollment file private and avoid
 sharing the executable with credentials embedded (it embeds none).
+
+The current published test build is **10,209,992 bytes**, SHA-256:
+`0197663f3d63b1cb6590f6f180fdb471d381f441341897a0b17efba7767347ea`.
+Any future replacement must update this checksum. The download route is public
+but carries no join ticket or owner secret.
 
 ## Known limits
 
