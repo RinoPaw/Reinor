@@ -62,6 +62,7 @@ type agent struct {
 	// Guarded by hub.mu; snapshot availability is from last observation.
 	capabilities []capability.Status
 	capObserved  time.Time
+	fileTransfer bool
 }
 
 func (a *agent) send(ctx context.Context, frame wire.Envelope) error {
@@ -158,6 +159,7 @@ func (h *hub) list() []map[string]any {
 			}
 			item["capabilities"] = append([]capability.Status(nil), a.capabilities...)
 			item["capabilities_observed_at"] = a.capObserved.UTC().Format(time.RFC3339Nano)
+			item["file_transfer"] = a.fileTransfer
 		}
 		arr = append(arr, item)
 	}
@@ -344,7 +346,7 @@ func (h *hub) serveAgent(w http.ResponseWriter, r *http.Request, token string, j
 		}
 	}
 	now := time.Now()
-	a := &agent{id: hello.DeviceID, os: hello.OS, conn: c, connected: now, capabilities: statuses, capObserved: now}
+	a := &agent{id: hello.DeviceID, os: hello.OS, conn: c, connected: now, capabilities: statuses, capObserved: now, fileTransfer: hello.Feature == "file-v1"}
 	if authorization.Mode == "temporary" {
 		a.temporaryID = authorization.ID
 		a.temporaryExpiresAt = authorization.ExpiresAt
@@ -385,7 +387,7 @@ func (h *hub) serveAgent(w http.ResponseWriter, r *http.Request, token string, j
 		if err != nil {
 			return
 		}
-		if frame.Type == "result" || frame.Type == "capture_result" || frame.Type == "capabilities_result" {
+		if frame.Type == "result" || frame.Type == "capture_result" || frame.Type == "capabilities_result" || frame.Type == "file_result" {
 			h.completed(a, frame)
 		}
 	}
@@ -514,6 +516,7 @@ func main() {
 		log.Fatalf("open local OAuth: %v", err)
 	}
 	registerJoinTools(m, joins, h)
+	registerFileTools(m, h)
 	mux := http.NewServeMux()
 	// Only /mcp is exposed externally. It accepts OAuth access tokens and
 	// preserves the existing owner bearer token for legacy local integrations.

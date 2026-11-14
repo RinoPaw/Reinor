@@ -172,15 +172,29 @@ func session(parent context.Context, url, id, token string) error {
 	if err != nil {
 		return fmt.Errorf("collect device capabilities: %w", err)
 	}
-	hello, _ := wire.Marshal(wire.Envelope{Type: "hello", DeviceID: id, OS: runtime.GOOS, Capabilities: capabilities})
+	hello, _ := wire.Marshal(wire.Envelope{Type: "hello", DeviceID: id, OS: runtime.GOOS, Capabilities: capabilities, Feature: "file-v1"})
 	if err := c.Write(parent, websocket.MessageBinary, hello); err != nil {
 		return err
 	}
 	log.Printf("connected to gateway device=%s", id)
 	var writeMu sync.Mutex
 	busy := make(chan struct{}, 1)
+	files := newFileTransfers()
+	defer files.closeAll()
 	connection, closeConn := context.WithCancel(parent)
 	defer closeConn()
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-connection.Done():
+				return
+			case <-ticker.C:
+				files.reapExpired(time.Now())
+			}
+		}
+	}()
 	send := func(frame wire.Envelope) error {
 		data, err := wire.Marshal(frame)
 		if err != nil {
@@ -204,7 +218,7 @@ func session(parent context.Context, url, id, token string) error {
 		if err != nil {
 			return err
 		}
-		if f.Type != "execute" && f.Type != "capture_screen" && f.Type != "get_capabilities" {
+		if f.Type != "execute" && f.Type != "capture_screen" && f.Type != "get_capabilities" && !strings.HasPrefix(f.Type, "file_") {
 			continue
 		}
 		select {
@@ -218,7 +232,11 @@ func session(parent context.Context, url, id, token string) error {
 				case "get_capabilities":
 					reply = capabilitySnapshot(f.TaskID)
 				default:
-					reply = executeWithContext(connection, f)
+					if strings.HasPrefix(f.Type, "file_") {
+						reply = files.handle(f)
+					} else {
+						reply = executeWithContext(connection, f)
+					}
 				}
 				if err := send(reply); err != nil {
 					log.Printf("send result: %v", err)
@@ -226,7 +244,11 @@ func session(parent context.Context, url, id, token string) error {
 				}
 			}(f)
 		default:
-			_ = send(wire.Envelope{Type: "result", TaskID: f.TaskID, Error: "device busy"})
+			kind := "result"
+			if strings.HasPrefix(f.Type, "file_") {
+				kind = "file_result"
+			}
+			_ = send(wire.Envelope{Type: kind, TaskID: f.TaskID, Error: "device busy"})
 		}
 	}
 }

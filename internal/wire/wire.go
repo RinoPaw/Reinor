@@ -31,6 +31,12 @@ type Envelope struct {
 	Quality        uint32
 	Capabilities   []byte
 	ErrorCode      string
+	Path           string
+	Offset         uint64
+	Size           uint64
+	SHA256         string
+	TransferID     string
+	Feature        string
 }
 
 func str(b []byte, n protowire.Number, s string) []byte {
@@ -77,6 +83,12 @@ func Marshal(v Envelope) ([]byte, error) {
 	b = varint(b, 19, uint64(v.Quality))
 	b = bytesField(b, 20, v.Capabilities)
 	b = str(b, 21, v.ErrorCode)
+	b = str(b, 22, v.Path)
+	b = varint(b, 23, v.Offset)
+	b = varint(b, 24, v.Size)
+	b = str(b, 25, v.SHA256)
+	b = str(b, 26, v.TransferID)
+	b = str(b, 27, v.Feature)
 	if len(b) > MaxFrame {
 		return nil, fmt.Errorf("protobuf frame too large: %d", len(b))
 	}
@@ -94,7 +106,7 @@ func Unmarshal(b []byte) (Envelope, error) {
 		}
 		b = b[n:]
 		switch field {
-		case 1, 2, 3, 4, 6, 7, 9, 10, 11, 12, 20, 21:
+		case 1, 2, 3, 4, 6, 7, 9, 10, 11, 12, 20, 21, 22, 25, 26, 27:
 			if typ != protowire.BytesType {
 				return out, fmt.Errorf("bad wire type for field %d", field)
 			}
@@ -127,9 +139,17 @@ func Unmarshal(b []byte) (Envelope, error) {
 				out.Capabilities = append([]byte(nil), val...)
 			case 21:
 				out.ErrorCode = string(val)
+			case 22:
+				out.Path = string(val)
+			case 25:
+				out.SHA256 = string(val)
+			case 26:
+				out.TransferID = string(val)
+			case 27:
+				out.Feature = string(val)
 			}
 			b = b[used:]
-		case 5, 8, 13, 14, 15, 16, 17, 18, 19:
+		case 5, 8, 13, 14, 15, 16, 17, 18, 19, 23, 24:
 			if typ != protowire.VarintType {
 				return out, fmt.Errorf("bad wire type for field %d", field)
 			}
@@ -156,6 +176,10 @@ func Unmarshal(b []byte) (Envelope, error) {
 				out.PhysicalHeight = uint32(val)
 			case 19:
 				out.Quality = uint32(val)
+			case 23:
+				out.Offset = val
+			case 24:
+				out.Size = val
 			}
 			b = b[used:]
 		default:

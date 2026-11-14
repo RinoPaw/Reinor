@@ -14,6 +14,7 @@ Reinor is a standalone **Model Context Protocol (MCP)** application for managing
 - Device enrollment / owner approval and online-status tracking.
 - Windows and Linux Agent command execution and their authenticated Gateway connections.
 - Owner-authorized Windows desktop screenshot capture with Agent-advertised capability discovery; headless devices report explicit unavailability (see [desktop capture documentation](docs/desktop-capture.md)).
+- Experimental owner-authorized binary file transfer (see [native file transfer](docs/native-file-transfer.md)).
 - MCP OAuth integration and app-specific tests.
 
 ## What does not belong here
