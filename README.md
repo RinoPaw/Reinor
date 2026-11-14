@@ -13,6 +13,7 @@ Reinor is a standalone **Model Context Protocol (MCP)** application for managing
 - MCP tools and their authorization boundary.
 - Device enrollment / owner approval and online-status tracking.
 - Windows and Linux Agent command execution and their authenticated Gateway connections.
+- Owner-authorized Windows desktop screenshot capture with Agent-advertised capability discovery; headless devices report explicit unavailability (see [desktop capture documentation](docs/desktop-capture.md)).
 - MCP OAuth integration and app-specific tests.
 
 ## What does not belong here
@@ -44,6 +45,38 @@ GOOS=linux GOARCH=amd64 go build -o reinor-agent-linux ./cmd/agent
 ```
 
 `go build ./cmd/gateway` builds a local binary; do not commit it. The project requires no Yggdrasil daemon or kernel networking features to compile or test.
+
+## Downloadable releases
+
+Windows 10/11 users can download versioned Agent packages from [GitHub Releases](https://github.com/RinoPaw/Reinor/releases). The Windows amd64 ZIP includes a reusable `Start-Temporary-Support.cmd` launcher: extract it, double-click it as a standard user, and approve the temporary request via Reinor. Never send someone a developer workstation binary as a release.
+
+Release assets are built by [GitHub Actions](.github/workflows/release.yml) from explicit version tags on `main`, with `SHA256SUMS`. Publishing does not automatically deploy to existing clients or the Gateway. See [release and branch policy](docs/releasing.md). Historical Windows 7 preview packages are separate and must not be mistaken for supported Win11 builds.
+
+## One-time support for a friend's computer
+
+The Agent supports `join -temporary -device temp-friend-mysql`. Temporary requests require explicit approval, have a 10-minute pending window and a 60-minute approved lifetime, and consume the ticket after the first connection. The friend closes the Agent to stop remote commands; the operator can also call `revoke_temporary_session(request_id)` to invalidate the ticket and disconnect immediately. No enrollment file or startup service is created. See [temporary support security and workflow](docs/temporary-support.md). Existing permanent Agent enrollment remains unchanged.
+
+## Optional Base64 command text
+
+The MCP `execute_command` tool accepts an optional boolean `base64` argument, defaulting to `false`. When enabled, `command` must be standard (padded) RFC 4648 Base64 encoding of a UTF-8 native shell command. Gateway decodes it before normal validation and dispatch. The decoded command must be at most 4096 bytes, and invalid Base64, malformed UTF-8, and NUL bytes are rejected.
+
+```json
+{
+  "device_id": "rino-pc-joined",
+  "command": "R2V0LVNlcnZpY2UgTXlTUUw4MA==",
+  "base64": true
+}
+```
+
+This example invokes `Get-Service MySQL80` on Windows. Encoding is only a transport convenience; it does not encrypt, sandbox, anonymize, restrict or change the command's permissions. The tool must continue to be treated as a write-capable remote execution tool, regardless of the flag's value.
+
+## OAuth for third-party MCP clients
+
+Reinor's OAuth server supports dynamic registration for **any MCP client** with an HTTPS callback URI, including Gemini's `https://oauth-redirect.googleusercontent.com/r/...`, and loopback HTTP callbacks for local native applications. No platform-specific hostname or path allowlist is required.
+
+Registration: `POST https://xuhuaai.top/register` with `redirect_uris` and public-client `token_endpoint_auth_method: "none"`. OAuth authorization always requires the Gateway owner's control token, and the consent page displays the claimed client name and **exact callback URL**. The callback must match the registered URI byte-for-byte. Arbitrary non-TLS remote callbacks, fragments, credentials in URI, and malformed addresses are rejected.
+
+Metadata discovery: `https://xuhuaai.top/.well-known/oauth-authorization-server`, MCP endpoint `https://xuhuaai.top/mcp`. Registration issues a public client ID without a client secret. Google Gemini may present a manual client ID/secret fallback if it does not complete dynamic registration. Do not enter the Gateway owner control token as an OAuth client secret.
 
 ## Operational compatibility
 

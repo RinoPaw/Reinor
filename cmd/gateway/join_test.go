@@ -69,7 +69,7 @@ func TestSingleGatewayJoinToExecute(t *testing.T) {
 	}
 	h := newHub()
 	control := mcp.NewServer(&mcp.Implementation{Name: "test-control", Version: "1"}, nil)
-	registerJoinTools(control, store)
+	registerJoinTools(control, store, newHub())
 	mux := http.NewServeMux()
 	joinRoutes(mux, store)
 	mux.Handle("/mcp", mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server { return control }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true}))
@@ -117,7 +117,7 @@ func TestSingleGatewayJoinToExecute(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.CloseNow()
-	hello, _ := wire.Marshal(wire.Envelope{Type: "hello", DeviceID: "test-device-joined", OS: "windows"})
+	hello, _ := wire.Marshal(wire.Envelope{Type: "hello", DeviceID: "test-device-joined", OS: "windows", Capabilities: []byte(`[{"id":"desktop.capture","supported":true,"available":true}]`)})
 	if err := conn.Write(ctx, websocket.MessageBinary, hello); err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +174,7 @@ func TestJoinThroughExistingWebSocketEndpoint(t *testing.T) {
 	}
 	h := newHub()
 	control := mcp.NewServer(&mcp.Implementation{Name: "test-control", Version: "1"}, nil)
-	registerJoinTools(control, store)
+	registerJoinTools(control, store, newHub())
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server { return control }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true}))
 	mux.HandleFunc("/agent/ws", func(w http.ResponseWriter, r *http.Request) {
@@ -190,7 +190,7 @@ func TestJoinThroughExistingWebSocketEndpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.CloseNow()
-	hello, _ := wire.Marshal(wire.Envelope{Type: "hello", DeviceID: "pc-joined", OS: "windows"})
+	hello, _ := wire.Marshal(wire.Envelope{Type: "hello", DeviceID: "pc-joined", OS: "windows", Capabilities: []byte(`[{"id":"desktop.capture","supported":true,"available":true}]`)})
 	if err := conn.Write(ctx, websocket.MessageBinary, hello); err != nil {
 		t.Fatal(err)
 	}
