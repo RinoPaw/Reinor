@@ -46,6 +46,12 @@ GOOS=linux GOARCH=amd64 go build -o reinor-agent-linux ./cmd/agent
 
 `go build ./cmd/gateway` builds a local binary; do not commit it. The project requires no Yggdrasil daemon or kernel networking features to compile or test.
 
+## Downloadable releases
+
+Windows 10/11 users can download versioned Agent packages from [GitHub Releases](https://github.com/RinoPaw/Reinor/releases). The Windows amd64 ZIP includes a reusable `Start-Temporary-Support.cmd` launcher: extract it, double-click it as a standard user, and approve the temporary request via Reinor. Never send someone a developer workstation binary as a release.
+
+Release assets are built by [GitHub Actions](.github/workflows/release.yml) from explicit version tags on `main`, with `SHA256SUMS`. Publishing does not automatically deploy to existing clients or the Gateway. See [release and branch policy](docs/releasing.md). Historical Windows 7 preview packages are separate and must not be mistaken for supported Win11 builds.
+
 ## One-time support for a friend's computer
 
 The Agent supports `join -temporary -device temp-friend-mysql`. Temporary requests require explicit approval, have a 10-minute pending window and a 60-minute approved lifetime, and consume the ticket after the first connection. The friend closes the Agent to stop remote commands; the operator can also call `revoke_temporary_session(request_id)` to invalidate the ticket and disconnect immediately. No enrollment file or startup service is created. See [temporary support security and workflow](docs/temporary-support.md). Existing permanent Agent enrollment remains unchanged.
