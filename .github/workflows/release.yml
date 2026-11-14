@@ -1,0 +1,73 @@
+name: Release
+
+# Only an explicitly pushed version tag publishes a Release. A tag must point
+# to a commit already reachable from main. Ordinary pushes never deploy.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require tag commit on main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git merge-base --is-ancestor HEAD origin/main
+          git describe --exact-match --tags HEAD
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Test and vet
+        run: |
+          go test ./...
+          go vet ./...
+
+      - name: Build release packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/win64 dist/linux64 dist/linux-arm64
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -o dist/win64/reinor-agent.exe ./cmd/agent
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o dist/linux64/reinor-agent ./cmd/agent
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o dist/linux-arm64/reinor-agent ./cmd/agent
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o dist/reinor-gateway-linux-amd64 ./cmd/gateway
+          cp packaging/windows/Start-Temporary-Support.cmd dist/win64/
+          cp packaging/windows/README.txt dist/win64/
+          (cd dist/win64 && zip -q ../reinor-agent-windows-amd64.zip reinor-agent.exe Start-Temporary-Support.cmd README.txt)
+          tar -C dist/linux64 -czf dist/reinor-agent-linux-amd64.tar.gz reinor-agent
+          tar -C dist/linux-arm64 -czf dist/reinor-agent-linux-arm64.tar.gz reinor-agent
+          (cd dist && sha256sum reinor-agent-windows-amd64.zip reinor-agent-linux-amd64.tar.gz reinor-agent-linux-arm64.tar.gz reinor-gateway-linux-amd64 > SHA256SUMS)
+          cat dist/SHA256SUMS
+
+      - name: Publish versioned GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$GITHUB_REF_NAME" \
+            dist/reinor-agent-windows-amd64.zip \
+            dist/reinor-agent-linux-amd64.tar.gz \
+            dist/reinor-agent-linux-arm64.tar.gz \
+            dist/reinor-gateway-linux-amd64 \
+            dist/SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag --generate-notes
