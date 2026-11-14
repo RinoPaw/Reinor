@@ -63,6 +63,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          extra_args=()
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            extra_args+=(--prerelease)
+          fi
           gh release create "$GITHUB_REF_NAME" \
             dist/reinor-agent-windows-amd64.zip \
             dist/reinor-agent-linux-amd64.tar.gz \
@@ -70,4 +74,4 @@ jobs:
             dist/reinor-gateway-linux-amd64 \
             dist/SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" \
-            --verify-tag --generate-notes
+            --verify-tag --generate-notes "${extra_args[@]}"
