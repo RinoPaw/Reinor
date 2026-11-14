@@ -133,3 +133,67 @@ func TestTemporaryCannotRevokeLongLivedJoin(t *testing.T) {
 		t.Fatalf("permanent reconnect broken: %v", err)
 	}
 }
+
+func TestTemporaryConsentDurationAndBounds(t *testing.T) {
+	s, err := newJoinStore(filepath.Join(t.TempDir(), "joins.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		id       string
+		duration time.Duration
+	}{
+		{"temp-1second", time.Second},
+		{"temp-90seconds", 90 * time.Second},
+		{"temp-30minutes", 30 * time.Minute},
+		{"temp-2hours", 2 * time.Hour},
+		{"temp-3h30m", 3*time.Hour + 30*time.Minute},
+		{"temp-48hours", 48 * time.Hour},
+		{"temp-240hours", 240 * time.Hour},
+	} {
+		rec, ticket, err := s.submitTemporaryWithDuration(tc.id, "windows", tc.duration)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rec.Duration != tc.duration.String() {
+			t.Fatalf("duration not persisted: %+v", rec)
+		}
+		approved, err := s.decide(rec.ID, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		remaining := time.Until(approved.ExpiresAt)
+		if remaining > tc.duration || remaining < tc.duration-time.Minute {
+			t.Fatalf("unexpected expiry: %s", remaining)
+		}
+		if !s.allowed(tc.id, ticket) {
+			t.Fatal("approved ticket rejected")
+		}
+	}
+	for _, d := range []time.Duration{0, -time.Nanosecond, -time.Hour} {
+		if _, _, err := s.submitTemporaryWithDuration("temp-invalid", "windows", d); err == nil {
+			t.Fatalf("accepted unsupported duration %s", d)
+		}
+	}
+}
+
+func TestLegacyTemporaryStoredWithoutDurationDefaultsToOneHour(t *testing.T) {
+	s, err := newJoinStore(filepath.Join(t.TempDir(), "joins.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, _, err := s.submitTemporary("temp-old-client", "windows")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.apply(rec.ID, func(r *joinRecord) error { r.Duration = ""; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	approved, err := s.decide(rec.ID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if remaining := time.Until(approved.ExpiresAt); remaining > time.Hour || remaining < 59*time.Minute {
+		t.Fatalf("old session lost default TTL: %s", remaining)
+	}
+}

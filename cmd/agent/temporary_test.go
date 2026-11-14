@@ -62,7 +62,7 @@ func TestTemporaryJoinDoesNotPersistOrReconnect(t *testing.T) {
 	}))
 	defer srv.Close()
 	done := make(chan error, 1)
-	go func() { done <- joinTemporary(strings.Replace(srv.URL, "http://", "ws://", 1), device) }()
+	go func() { done <- joinTemporary(strings.Replace(srv.URL, "http://", "ws://", 1), device, time.Hour) }()
 	select {
 	case <-done:
 	case <-time.After(4 * time.Second):

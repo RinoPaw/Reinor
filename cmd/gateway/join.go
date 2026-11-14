@@ -31,6 +31,7 @@ type joinRecord struct {
 	TicketHash  string    `json:"ticket_hash"`
 	RequestedAt time.Time `json:"requested_at"`
 	Mode        string    `json:"mode,omitempty"`
+	Duration    string    `json:"duration,omitempty"`
 	ExpiresAt   time.Time `json:"expires_at,omitempty"`
 	UsedAt      time.Time `json:"used_at,omitempty"`
 }
@@ -166,6 +167,17 @@ func (s *joinStore) submit(device, osName string) (joinRecord, string, error) {
 }
 
 func (s *joinStore) submitTemporary(device, osName string) (joinRecord, string, error) {
+	return s.submitTemporaryWithDuration(device, osName, temporarySessionTTL)
+}
+
+func validTemporaryDuration(d time.Duration) bool {
+	return d > 0
+}
+
+func (s *joinStore) submitTemporaryWithDuration(device, osName string, duration time.Duration) (joinRecord, string, error) {
+	if !validTemporaryDuration(duration) {
+		return joinRecord{}, "", errors.New("temporary duration must be positive")
+	}
 	if !validDeviceID.MatchString(device) || !strings.HasPrefix(device, "temp-") || len(osName) > 64 {
 		return joinRecord{}, "", errors.New("temporary device ID must begin with temp-")
 	}
@@ -178,7 +190,7 @@ func (s *joinStore) submitTemporary(device, osName string) (joinRecord, string, 
 		return joinRecord{}, "", err
 	}
 	now := time.Now().UTC()
-	rec := joinRecord{ID: id, DeviceID: device, OS: osName, State: "pending", Mode: "temporary", TicketHash: ticketHash(ticket), RequestedAt: now, ExpiresAt: now.Add(temporaryPendingTTL)}
+	rec := joinRecord{ID: id, DeviceID: device, OS: osName, State: "pending", Mode: "temporary", Duration: duration.String(), TicketHash: ticketHash(ticket), RequestedAt: now, ExpiresAt: now.Add(temporaryPendingTTL)}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, prior := range s.records {
@@ -276,7 +288,15 @@ func (s *joinStore) decide(id string, approve bool) (joinRecord, error) {
 	if approve {
 		current.State = "approved"
 		if current.Mode == "temporary" {
-			current.ExpiresAt = time.Now().UTC().Add(temporarySessionTTL)
+			duration := temporarySessionTTL // Legacy records did not store the requested duration.
+			if current.Duration != "" {
+				var err error
+				duration, err = time.ParseDuration(current.Duration)
+				if err != nil || !validTemporaryDuration(duration) {
+					return joinRecord{}, errors.New("invalid stored temporary duration")
+				}
+			}
+			current.ExpiresAt = time.Now().UTC().Add(duration)
 		}
 	} else {
 		current.State = "rejected"
@@ -442,6 +462,13 @@ func (h *hub) serveJoin(w http.ResponseWriter, r *http.Request, s *joinStore) {
 	var ticket string
 	if hello.Command == "temporary" {
 		rec, ticket, err = s.submitTemporary(hello.DeviceID, hello.OS)
+	} else if strings.HasPrefix(hello.Command, "temporary:") {
+		duration, parseErr := time.ParseDuration(strings.TrimPrefix(hello.Command, "temporary:"))
+		if parseErr != nil {
+			err = errors.New("invalid temporary duration")
+		} else {
+			rec, ticket, err = s.submitTemporaryWithDuration(hello.DeviceID, hello.OS, duration)
+		}
 	} else if hello.Command != "" {
 		ticket = hello.Command
 		rec, err = s.resume(hello.DeviceID, ticket)

@@ -15,7 +15,10 @@ import (
 
 // joinTemporary never reads or writes a persistent enrollment file.
 // The Gateway grants a single connection; the Agent makes no retry after it ends.
-func joinTemporary(ws, device string) error {
+func joinTemporary(ws, device string, duration time.Duration) error {
+	if duration <= 0 {
+		return errors.New("temporary duration must be positive")
+	}
 	if !validLocalDeviceID(device) || !strings.HasPrefix(device, "temp-") {
 		return errors.New("temporary device ID must begin with temp-")
 	}
@@ -29,7 +32,11 @@ func joinTemporary(ws, device string) error {
 	}
 	defer c.CloseNow()
 	c.SetReadLimit(wire.MaxFrame)
-	hello, err := wire.Marshal(wire.Envelope{Type: "hello", DeviceID: device, OS: runtime.GOOS, Command: "temporary"})
+	command := "temporary"
+	if duration != time.Hour {
+		command = "temporary:" + duration.String()
+	}
+	hello, err := wire.Marshal(wire.Envelope{Type: "hello", DeviceID: device, OS: runtime.GOOS, Command: command})
 	if err != nil {
 		return err
 	}
@@ -61,7 +68,7 @@ func joinTemporary(ws, device string) error {
 				return errors.New("temporary approval does not match request")
 			}
 			_ = c.Close(websocket.StatusNormalClosure, "enrollment approved")
-			fmt.Printf("Temporary access approved. Maximum duration: 60 minutes.\nClose this terminal at any time to stop the Agent.\n")
+			fmt.Printf("Temporary access approved. Maximum duration: %s.\nClose this terminal at any time to stop the Agent.\n", duration)
 			return session(ctx, ws, device, ticket)
 		case "join_error":
 			if msg.Error == "" {

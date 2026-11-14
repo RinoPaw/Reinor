@@ -104,6 +104,7 @@ func joinMain(args []string) error {
 	gateway := fs.String("gateway", "https://xuhuaai.top", "Gateway URL")
 	device := fs.String("device", hostname, "Device ID")
 	temporary := fs.Bool("temporary", false, "one-time support session: no credential file and no automatic reconnect")
+	tempDuration := fs.Duration("temporary-duration", time.Hour, "consented positive session duration (default 1h), e.g. 30m, 3h30m, 48h; only with -temporary")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -115,7 +116,10 @@ func joinMain(args []string) error {
 		return err
 	}
 	if *temporary {
-		return joinTemporary(ws, *device)
+		return joinTemporary(ws, *device, *tempDuration)
+	}
+	if *tempDuration != time.Hour {
+		return errors.New("-temporary-duration requires -temporary")
 	}
 	path, err := joinFile(*device)
 	if err != nil {

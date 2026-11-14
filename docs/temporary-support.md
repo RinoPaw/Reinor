@@ -14,7 +14,7 @@ One-time support is for a friend's computer during a specific, consented trouble
 Download the verified `reinor-agent-temp.exe` from the operator's trusted link, then run from a normal user terminal:
 
 ```powershell
-.\reinor-agent-temp.exe join -temporary -device temp-friend-mysql
+.\reinor-agent-temp.exe join -temporary -device temp-friend-mysql -temporary-duration 3h30m
 ```
 
 Do not run as Administrator unless a diagnostic actually needs administrator rights and the friend separately approves that specific action. No service or startup task is created.
@@ -30,9 +30,9 @@ chmod +x reinor-agent-temp-linux-amd64
 
 Both download links retain stable filenames across releases. Do not run with sudo unless separately authorized for a specific step.
 
-The program prints a `join_...` request ID, but **does not print or save the private join ticket**. The friend sends the request ID to the operator. This is a 10-minute pending approval window.
+The program prints a `join_...` request ID, but **does not print or save the private join ticket**. The operator can discover the request with `list_join_requests`; the friend does not need to relay the ID. This is a 10-minute pending approval window.
 
-The operator calls `list_join_requests` to confirm the exact device name and `mode=temporary`, then `approve_join_request(request_id)`. Approval starts a **60-minute server-side lifetime**.
+The operator calls `list_join_requests` to confirm the exact device name and `mode=temporary`, then `approve_join_request(request_id)`. Approval starts the requested **positive Go duration** (for example `30m`, `3h30m`, or `48h`), validated by the Gateway. The default remains 1h for existing scripts. The friend must explicitly choose a different duration when launching the Agent. There is no arbitrary policy maximum in this version; the representation is bounded by Go's `time.Duration` type. The approver should check the requested duration before granting access.
 
 During that time, the operator can use the normal `execute_command` and `get_device_capabilities` tools. These commands run with the same operating-system user privileges as the friend-launched Agent. Avoid reading files unrelated to the incident or printing credentials in terminal output. Before changing MySQL configuration or data, ask the owner and capture a suitable backup.
 
@@ -40,7 +40,7 @@ During that time, the operator can use the normal `execute_command` and `get_dev
 
 - **Friend:** close the Agent console or terminate its process.
 - **Operator:** call `revoke_temporary_session(request_id)` to invalidate the credential and disconnect the session immediately.
-- **Gateway:** closes the session automatically when its 60-minute lifetime ends.
+- **Gateway:** closes the session automatically when the selected approved lifetime ends.
 - **Agent:** makes only one authorized WebSocket connection, never automatically retries after disconnect and never writes a `joined-*.json` file.
 
 After the first authorized connection, the Gateway persistently records the ticket as consumed. It cannot be used for another connection, even after Gateway restart. A revoked or expired ticket also cannot be used. An unexpected network disconnect requires a **fresh join request and fresh owner approval**.

@@ -54,7 +54,7 @@ Release assets are built by [GitHub Actions](.github/workflows/release.yml) from
 
 ## One-time support for a friend's computer
 
-The Agent supports `join -temporary -device temp-friend-mysql`. Temporary requests require explicit approval, have a 10-minute pending window and a 60-minute approved lifetime, and consume the ticket after the first connection. The friend closes the Agent to stop remote commands; the operator can also call `revoke_temporary_session(request_id)` to invalidate the ticket and disconnect immediately. No enrollment file or startup service is created. See [temporary support security and workflow](docs/temporary-support.md). Existing permanent Agent enrollment remains unchanged.
+The Agent supports `join -temporary -device temp-friend-mysql`. Temporary requests require explicit approval, have a 10-minute pending window and a 1-hour approved lifetime by default; the friend can explicitly request any positive duration (e.g. `-temporary-duration 3h30m`). The ticket is consumed after the first connection. The friend closes the Agent to stop remote commands; the operator can also call `revoke_temporary_session(request_id)` to invalidate the ticket and disconnect immediately. No enrollment file or startup service is created. See [temporary support security and workflow](docs/temporary-support.md). Existing permanent Agent enrollment remains unchanged.
 
 ## Optional Base64 command text
 
