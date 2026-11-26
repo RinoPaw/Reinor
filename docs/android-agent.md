@@ -7,6 +7,9 @@ implemented in this stage.**
 
 ## Build
 
+GitHub Actions builds Android ARM64 on push, pull request and manual dispatch using Android NDK 28.2.13676358, API 24, and cgo. The `reinor-android-arm64-<commit SHA>` artifact contains the executable and `SHA256SUMS`. Tagged releases on `main` publish the same executable and include it in the release checksum manifest. CI builds do not deploy to the Gateway or enrolled devices automatically.
+
+
 Build on Windows with Go 1.25+ and Android NDK 28 (adjust NDK path and API
 level to the host environment). Android **must** use a system libc-backed DNS
 resolver, so do not use `CGO_ENABLED=0` when cross-compiling the production
@@ -59,13 +62,14 @@ decision expressly authorizes it. A persistent session grants command
 execution under the Agent user, so keep the enrollment file private and avoid
 sharing the executable with credentials embedded (it embeds none).
 
-The current published test build is **10,209,992 bytes**, SHA-256:
+The legacy test build hosted at the URL above is **10,209,992 bytes**, SHA-256:
 `0197663f3d63b1cb6590f6f180fdb471d381f441341897a0b17efba7767347ea`.
 Any future replacement must update this checksum. The download route is public
 but carries no join ticket or owner secret.
 
 ## Known limits
 
+- File transfer is supported by builds that advertise `file-v1`; check `list_devices` after upgrading. Older deployed binaries may report `file_transfer: false`. Test upload and download with a disposable file in the Termux home directory before relying on this feature.
 - Android screenshot capture advertises `CAPABILITY_UNSUPPORTED`.
 - Termux/Android may stop long-running background work because of battery,
   phantom-process, or vendor-specific lifecycle restrictions. Continuous
