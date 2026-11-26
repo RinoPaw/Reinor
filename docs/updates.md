@@ -47,6 +47,36 @@ The script holds an exclusive update lock, verifies the staged file twice, retai
 
 **Gateway health checks are local service checks**, so reconfirm `rino-pc-joined` online through MCP before declaring the entire control plane healthy. Both update scripts keep logs and dated binaries for forensic review. No live deployment is performed merely by merging this branch.
 
+## Android ARM64 Agent
+
+The native `update` subcommand supports the Termux CLI executable. Use a SHA-256
+obtained independently from a reviewed build or release.
+
+```sh
+~/.local/bin/reinor-agent update -sha256 VERIFIED_SHA256 -dry-run
+~/.local/bin/reinor-agent update -sha256 VERIFIED_SHA256
+```
+
+Use `-file /path/to/staged-agent` for a local artifact, or `-url https://...`
+for an immutable HTTPS asset. The default URL is the existing cloud download.
+The updater verifies the entire artifact, caps its size at 64 MiB, stages it
+beside the installed executable, and atomically replaces the executable after
+saving the prior binary as `reinor-agent.previous`. It does not alter enrollment.
+An interrupted download or incorrect hash leaves the installed executable intact.
+
+Stop the old Agent and launch the same join command to activate the replacement.
+To restore the prior executable, run:
+
+```sh
+~/.local/bin/reinor-agent update -rollback -sha256 PREVIOUS_VERIFIED_SHA256
+```
+
+If the replacement cannot execute, restore the verified `.previous` file from
+an independent Termux shell instead. Only one previous binary is retained.
+A stale `.update-lock` directory may be removed after confirming no updater is
+running. Automatic restart, remote update orchestration, signed manifests and
+post-restart health-check rollback are not implemented by this subcommand.
+
 ## Known limitations / follow-up
 
 - Establish signed, immutable release manifests and provenance verification before enabling unattended downloads.
