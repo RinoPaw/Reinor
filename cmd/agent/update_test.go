@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -46,7 +47,7 @@ func TestVerifiedAgentUpdate(t *testing.T) {
 	check(target, "new binary")
 	check(target+".previous", "old binary")
 	check(credential, "enrollment")
-	if info, err := os.Stat(target); err != nil || info.Mode().Perm()&0100 == 0 {
+	if info, err := os.Stat(target); err != nil || (runtime.GOOS != "windows" && info.Mode().Perm()&0100 == 0) {
 		t.Fatalf("executable permission lost: %v, %v", info, err)
 	}
 	old, err := os.ReadFile(target + ".previous")
