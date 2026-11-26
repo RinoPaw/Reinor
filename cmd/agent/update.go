@@ -173,6 +173,9 @@ func replaceAgentExecutable(target string, source io.Reader, expected [sha256.Si
 	if _, err := io.Copy(backup, current); err != nil {
 		return err
 	}
+	if err := current.Close(); err != nil {
+		return err
+	}
 	if err := backup.Chmod(info.Mode().Perm()); err != nil {
 		return err
 	}
