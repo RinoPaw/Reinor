@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"errors"
 	"io"
@@ -48,12 +49,11 @@ func TestVerifiedAgentUpdate(t *testing.T) {
 	if info, err := os.Stat(target); err != nil || info.Mode().Perm()&0100 == 0 {
 		t.Fatalf("executable permission lost: %v, %v", info, err)
 	}
-	old, err := os.Open(target + ".previous")
+	old, err := os.ReadFile(target + ".previous")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer old.Close()
-	if err := replaceAgentExecutable(target, old, sha256.Sum256([]byte("old binary")), false); err != nil {
+	if err := replaceAgentExecutable(target, bytes.NewReader(old), sha256.Sum256([]byte("old binary")), false); err != nil {
 		t.Fatal(err)
 	}
 	check(target, "old binary")
