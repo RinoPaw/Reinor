@@ -10,6 +10,7 @@ import (
 
 const (
 	DesktopCapture = "desktop.capture"
+	FileV2         = "file.stream.v2"
 
 	NoDesktopSession = "NO_DESKTOP_SESSION"
 	Unsupported      = "CAPABILITY_UNSUPPORTED"
