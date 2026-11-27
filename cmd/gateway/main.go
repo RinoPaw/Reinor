@@ -518,6 +518,9 @@ func main() {
 	registerJoinTools(m, joins, h)
 	registerFileTools(m, h)
 	mux := http.NewServeMux()
+	if err := installV2(m, h, mux, os.Getenv("REINOR_PUBLIC_ORIGIN"), joinDB+".transfers"); err != nil {
+		log.Fatalf("initialize file v2: %v", err)
+	}
 	// Only /mcp is exposed externally. It accepts OAuth access tokens and
 	// preserves the existing owner bearer token for legacy local integrations.
 	login.InstallRoutes(mux)
