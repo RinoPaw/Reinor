@@ -122,7 +122,7 @@ func executeWithContext(parent context.Context, f wire.Envelope) wire.Envelope {
 }
 func capabilitySnapshot(taskID string) wire.Envelope {
 	reply := wire.Envelope{Type: "capabilities_result", TaskID: taskID}
-	payload, err := capability.Encode([]capability.Status{desktop.Capability(), {ID: capability.AsyncTask, Supported: true, Available: true}})
+	payload, err := capability.Encode([]capability.Status{desktop.Capability(), {ID: capability.FileV2, Supported: true, Available: true}, {ID: capability.AsyncTask, Supported: true, Available: true}})
 	if err != nil {
 		reply.Error = err.Error()
 		return reply
@@ -172,7 +172,7 @@ func session(parent context.Context, url, id, token string) error {
 	}
 	defer c.CloseNow()
 	c.SetReadLimit(wire.MaxFrame)
-	capabilities, err := capability.Encode([]capability.Status{desktop.Capability(), {ID: capability.AsyncTask, Supported: true, Available: true}})
+	capabilities, err := capability.Encode([]capability.Status{desktop.Capability(), {ID: capability.FileV2, Supported: true, Available: true}, {ID: capability.AsyncTask, Supported: true, Available: true}})
 	if err != nil {
 		return fmt.Errorf("collect device capabilities: %w", err)
 	}
@@ -183,6 +183,10 @@ func session(parent context.Context, url, id, token string) error {
 	log.Printf("connected to gateway device=%s", id)
 	var writeMu sync.Mutex
 	busy := make(chan struct{}, 1)
+	streamBusy := make(chan struct{}, 1)
+	var streamMu sync.Mutex
+	var streamID string
+	var streamCancel context.CancelFunc
 	files := newFileTransfers()
 	defer files.closeAll()
 	connection, closeConn := context.WithCancel(parent)
@@ -221,6 +225,48 @@ func session(parent context.Context, url, id, token string) error {
 		f, err := wire.Unmarshal(data)
 		if err != nil {
 			return err
+		}
+		if f.Type == "file_v2_cancel" {
+			streamMu.Lock()
+			if streamID == f.TransferID && streamCancel != nil {
+				streamCancel()
+			}
+			streamMu.Unlock()
+			continue
+		}
+		if f.Type == "file_v2_send" || f.Type == "file_v2_receive" {
+			select {
+			case streamBusy <- struct{}{}:
+				streamCtx, stopStream := context.WithCancel(connection)
+				streamMu.Lock()
+				streamID = f.TransferID
+				streamCancel = stopStream
+				streamMu.Unlock()
+				go func(f wire.Envelope) {
+					defer func() {
+						stopStream()
+						streamMu.Lock()
+						streamID = ""
+						streamCancel = nil
+						streamMu.Unlock()
+						<-streamBusy
+					}()
+					reply := wire.Envelope{Type: "file_result", TaskID: f.TaskID}
+					var err error
+					if f.Type == "file_v2_receive" {
+						err = receiveFileV2(streamCtx, url, f)
+					} else {
+						err = sendFileV2(streamCtx, url, f)
+					}
+					if err != nil {
+						reply.Error = err.Error()
+					}
+					_ = send(reply)
+				}(f)
+			default:
+				_ = send(wire.Envelope{Type: "file_result", TaskID: f.TaskID, Error: "file stream busy"})
+			}
+			continue
 		}
 		if f.Type != "execute" && f.Type != "execute_task" && f.Type != "capture_screen" && f.Type != "get_capabilities" && !strings.HasPrefix(f.Type, "file_") {
 			continue

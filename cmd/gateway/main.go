@@ -20,6 +20,7 @@ import (
 
 	"github.com/RinoPaw/Reinor/internal/capability"
 	"github.com/RinoPaw/Reinor/internal/oauthlocal"
+	"github.com/RinoPaw/Reinor/internal/operation"
 	"github.com/RinoPaw/Reinor/internal/task"
 	"github.com/RinoPaw/Reinor/internal/wire"
 	"github.com/coder/websocket"
@@ -449,8 +450,8 @@ func result(content any, isError bool) *mcp.CallToolResult {
 	b, _ := json.Marshal(content)
 	return &mcp.CallToolResult{IsError: isError, Content: []mcp.Content{&mcp.TextContent{Text: string(b)}}}
 }
-func registerExecuteTool(m *mcp.Server, h *hub) {
-	mcp.AddTool(m, &mcp.Tool{Name: "execute_command", Description: "Run a native OS shell command (PowerShell on Windows, /bin/sh on Linux) on an online device. May change files or system state. Optional base64=true decodes standard Base64 UTF-8 command text; the command still has full execution privileges."}, func(ctx context.Context, req *mcp.CallToolRequest, args execArgs) (*mcp.CallToolResult, any, error) {
+func registerExecuteTool(m *mcp.Server, h *hub, reg *operation.Registry) {
+	operation.Register(reg, m, operation.Spec{Name: "command.execute", Effect: operation.Action, Version: "1", Requires: []string{"online"}}, &mcp.Tool{Name: "execute_command", Description: "Run a native OS shell command (PowerShell on Windows, /bin/sh on Linux) on an online device. May change files or system state. Optional base64=true decodes standard Base64 UTF-8 command text; the command still has full execution privileges."}, func(ctx context.Context, req *mcp.CallToolRequest, args execArgs) (*mcp.CallToolResult, any, error) {
 		command, err := decodeExecuteCommand(args)
 		if err != nil {
 			return result(map[string]string{"error": err.Error()}, true), nil, nil
@@ -468,10 +469,18 @@ func main() {
 	controlToken := loadSecret("RINOMESH_CONTROL_TOKEN_FILE")
 	h := newHub()
 	m := mcp.NewServer(&mcp.Implementation{Name: "reinor", Version: "0.1.0"}, nil)
-	mcp.AddTool(m, &mcp.Tool{Name: "list_devices", Description: "List online Reinor devices."}, func(ctx context.Context, req *mcp.CallToolRequest, args noArgs) (*mcp.CallToolResult, any, error) {
+	mode := os.Getenv("REINOR_MCP_MODE")
+	if mode == "" {
+		mode = "dual"
+	}
+	if mode != "dual" && mode != "dynamic" {
+		log.Fatal("invalid REINOR_MCP_MODE")
+	}
+	reg := operation.New(mode == "dual", h.operationAvailability)
+	operation.Register(reg, m, operation.Spec{Name: "device.list", Effect: operation.Read, Version: "1"}, &mcp.Tool{Name: "list_devices", Description: "List online Reinor devices."}, func(ctx context.Context, req *mcp.CallToolRequest, args noArgs) (*mcp.CallToolResult, any, error) {
 		return result(h.list(), false), nil, nil
 	})
-	mcp.AddTool(m, &mcp.Tool{Name: "get_device_capabilities", Description: "Probe device capabilities now; support and availability are separate and can change after login."}, func(ctx context.Context, req *mcp.CallToolRequest, args deviceArgs) (*mcp.CallToolResult, any, error) {
+	operation.Register(reg, m, operation.Spec{Name: "device.capabilities", Effect: operation.Read, Version: "1", Requires: []string{"online"}}, &mcp.Tool{Name: "get_device_capabilities", Description: "Probe device capabilities now; support and availability are separate and can change after login."}, func(ctx context.Context, req *mcp.CallToolRequest, args deviceArgs) (*mcp.CallToolResult, any, error) {
 		caps, observed, err := h.deviceCapabilities(ctx, args.DeviceID)
 		if err != nil {
 			return result(map[string]string{"error": err.Error()}, true), nil, nil
@@ -482,8 +491,8 @@ func main() {
 			"observed_at":  observed.Format(time.RFC3339Nano),
 		}, false), nil, nil
 	})
-	registerExecuteTool(m, h)
-	mcp.AddTool(m, &mcp.Tool{Name: "capture_screen", Description: "Capture an explicitly owner-authorized interactive desktop on a device advertising desktop.capture. Returns JPEG and physical-pixel geometry; a headless device returns a structured unavailable error."}, func(ctx context.Context, req *mcp.CallToolRequest, args captureArgs) (*mcp.CallToolResult, any, error) {
+	registerExecuteTool(m, h, reg)
+	operation.Register(reg, m, operation.Spec{Name: "desktop.capture", Effect: operation.Action, Version: "1", Requires: []string{"online", "desktop.capture"}}, &mcp.Tool{Name: "capture_screen", Description: "Capture an explicitly owner-authorized interactive desktop on a device advertising desktop.capture. Returns JPEG and physical-pixel geometry; a headless device returns a structured unavailable error."}, func(ctx context.Context, req *mcp.CallToolRequest, args captureArgs) (*mcp.CallToolResult, any, error) {
 		r, err := h.capture(ctx, args.DeviceID, args.MaxWidth, args.Quality, 20*time.Second)
 		if err != nil {
 			code := "REQUEST_FAILED"
@@ -529,16 +538,20 @@ func main() {
 	if err != nil {
 		log.Fatalf("open local OAuth: %v", err)
 	}
-	registerJoinTools(m, joins, h)
-	registerFileTools(m, h)
+	registerJoinTools(m, joins, h, reg)
+	registerFileTools(m, h, reg)
 	tasks, err := task.Open(joinDB + ".tasks")
 	if err != nil {
 		log.Fatalf("open task store: %v", err)
 	}
-	registerTaskTools(m, h, tasks)
+	registerTaskTools(m, h, tasks, reg)
 	mux := http.NewServeMux()
+	if err := installV2(m, h, mux, os.Getenv("REINOR_PUBLIC_ORIGIN"), joinDB+".transfers", reg); err != nil {
+		log.Fatalf("initialize file v2: %v", err)
+	}
 	// Only /mcp is exposed externally. It accepts OAuth access tokens and
 	// preserves the existing owner bearer token for legacy local integrations.
+	reg.Install(m)
 	login.InstallRoutes(mux)
 	mux.Handle("/mcp", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		bearerValue := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")

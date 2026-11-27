@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/RinoPaw/Reinor/internal/capability"
+	"github.com/RinoPaw/Reinor/internal/operation"
 	"github.com/RinoPaw/Reinor/internal/task"
 	"github.com/RinoPaw/Reinor/internal/wire"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -104,22 +105,22 @@ func runTask(h *hub, s *task.Store, a *agent, r task.Record, cmd string) {
 	}
 	update(status, &reply.ExitCode, string(reply.Stdout), string(reply.Stderr), reply.Error)
 }
-func registerTaskTools(m *mcp.Server, h *hub, s *task.Store) {
-	mcp.AddTool(m, &mcp.Tool{Name: "submit_task", Description: "Start a command on an online task-capable device and return a persistent task ID. Does not retry after disconnect. Runs with the Agent account's privileges."}, func(_ context.Context, _ *mcp.CallToolRequest, args submitTaskArgs) (*mcp.CallToolResult, any, error) {
+func registerTaskTools(m *mcp.Server, h *hub, s *task.Store, reg *operation.Registry) {
+	operation.Register(reg, m, operation.Spec{Name: "task.submit", Effect: operation.Action, Version: "1", Requires: []string{"online", capability.AsyncTask}}, &mcp.Tool{Name: "submit_task", Description: "Start a command on an online task-capable device and return a persistent task ID. Does not retry after disconnect. Runs with the Agent account's privileges."}, func(_ context.Context, _ *mcp.CallToolRequest, args submitTaskArgs) (*mcp.CallToolResult, any, error) {
 		r, err := submitTask(h, s, args)
 		if err != nil {
 			return result(map[string]string{"error": err.Error()}, true), nil, nil
 		}
 		return result(r, false), nil, nil
 	})
-	mcp.AddTool(m, &mcp.Tool{Name: "get_task", Description: "Get task status and final bounded stdout/stderr by task ID."}, func(_ context.Context, _ *mcp.CallToolRequest, args taskIDArgs) (*mcp.CallToolResult, any, error) {
+	operation.Register(reg, m, operation.Spec{Name: "task.get", Effect: operation.Read, Version: "1"}, &mcp.Tool{Name: "get_task", Description: "Get task status and final bounded stdout/stderr by task ID."}, func(_ context.Context, _ *mcp.CallToolRequest, args taskIDArgs) (*mcp.CallToolResult, any, error) {
 		r, ok := s.Get(args.TaskID)
 		if !ok {
 			return result(map[string]string{"error": "task not found"}, true), nil, nil
 		}
 		return result(r, false), nil, nil
 	})
-	mcp.AddTool(m, &mcp.Tool{Name: "list_tasks", Description: "List recent task metadata, optionally filtered by device."}, func(_ context.Context, _ *mcp.CallToolRequest, args listTaskArgs) (*mcp.CallToolResult, any, error) {
+	operation.Register(reg, m, operation.Spec{Name: "task.list", Effect: operation.Read, Version: "1"}, &mcp.Tool{Name: "list_tasks", Description: "List recent task metadata, optionally filtered by device."}, func(_ context.Context, _ *mcp.CallToolRequest, args listTaskArgs) (*mcp.CallToolResult, any, error) {
 		if args.Limit == 0 {
 			args.Limit = 20
 		}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/RinoPaw/Reinor/internal/capability"
+	"github.com/RinoPaw/Reinor/internal/operation"
 	"github.com/RinoPaw/Reinor/internal/task"
 	"github.com/RinoPaw/Reinor/internal/wire"
 	"github.com/coder/websocket"
@@ -22,7 +23,9 @@ func TestTaskMCPRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil)
-	registerTaskTools(m, h, store)
+	reg := operation.New(false, h.operationAvailability)
+	registerTaskTools(m, h, store, reg)
+	reg.Install(m)
 	token := strings.Repeat("z", 40)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/agent/ws", func(w http.ResponseWriter, r *http.Request) { h.serveAgent(w, r, token, nil) })
@@ -45,7 +48,8 @@ func TestTaskMCPRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitTemporaryConnected(t, h, "task-test")
-	got := testJoinMCP(t, server.URL+"/mcp", "submit_task", map[string]any{"device_id": "task-test", "command": "echo hello", "timeout_seconds": 300})
+	submit := reg.Discover(operation.DiscoverArgs{Operation: "task.submit"})[0]
+	got := testJoinMCP(t, server.URL+"/mcp", "invoke", map[string]any{"operation": submit.Name, "revision": submit.Revision, "arguments": map[string]any{"device_id": "task-test", "command": "echo hello", "timeout_seconds": 300}})
 	id, ok := got["task_id"].(string)
 	if !ok {
 		t.Fatalf("submit: %v", got)
@@ -71,7 +75,8 @@ func TestTaskMCPRoundTrip(t *testing.T) {
 			if r.Status != task.Succeeded || r.Stdout != "hello" {
 				t.Fatalf("result: %+v", r)
 			}
-			out := testJoinMCP(t, server.URL+"/mcp", "get_task", map[string]any{"task_id": id})
+			get := reg.Discover(operation.DiscoverArgs{Operation: "task.get"})[0]
+			out := testJoinMCP(t, server.URL+"/mcp", "query", map[string]any{"operation": get.Name, "revision": get.Revision, "arguments": map[string]any{"task_id": id}})
 			if out["stdout"] != "hello" {
 				t.Fatalf("get: %v", out)
 			}

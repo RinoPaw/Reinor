@@ -1,7 +1,7 @@
 # Asynchronous command tasks
 
 This first implementation separates command submission from result retrieval
-using submit_task, get_task and list_tasks, inspired by AWS Systems Manager
+using task.submit, task.get and task.list, inspired by AWS Systems Manager
 Run Command. The MCP request can finish before the device command does.
 
 - A modern Agent advertises task.async.v1; old Agents retain synchronous
@@ -24,5 +24,5 @@ Run Command. The MCP request can finish before the device command does.
   recovery are not implemented. They require process supervision and
   explicit acknowledgment semantics.
 
-Deploy an updated Gateway and modern Agents before use. Existing MCP
-clients need to refresh their tool lists. No database migration required.
+Deploy an updated Gateway and modern Agents before use. Dynamic MCP
+clients discover the new operations without changing the three fixed tools. No database migration required.
