@@ -70,3 +70,13 @@ func TestAgentExecuteDeadlineUnix(t *testing.T) {
 		t.Fatal("deadline took too long")
 	}
 }
+
+func TestAsyncTaskExecutionBeyondLegacyDeadline(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX sleep regression runs on Linux CI")
+	}
+	got := execute(wire.Envelope{Type: "execute_task", Command: "sleep 21; echo finished", TimeoutMS: 30000})
+	if got.ExitCode != 0 || got.Error != "" || !strings.Contains(string(got.Stdout), "finished") {
+		t.Fatalf("long task did not finish: %+v", got)
+	}
+}

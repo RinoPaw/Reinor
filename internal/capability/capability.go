@@ -10,6 +10,7 @@ import (
 
 const (
 	DesktopCapture = "desktop.capture"
+	AsyncTask      = "task.async.v1"
 
 	NoDesktopSession = "NO_DESKTOP_SESSION"
 	Unsupported      = "CAPABILITY_UNSUPPORTED"

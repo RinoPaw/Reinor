@@ -93,7 +93,11 @@ func executeWithContext(parent context.Context, f wire.Envelope) wire.Envelope {
 		return reply
 	}
 	ms := f.TimeoutMS
-	if ms < 1000 || ms > 20000 {
+	maxMS := uint32(20000)
+	if f.Type == "execute_task" {
+		maxMS = 3600000
+	}
+	if ms < 1000 || ms > maxMS {
 		ms = 20000
 	}
 	ctx, cancel := context.WithTimeout(parent, time.Duration(ms)*time.Millisecond)
@@ -118,7 +122,7 @@ func executeWithContext(parent context.Context, f wire.Envelope) wire.Envelope {
 }
 func capabilitySnapshot(taskID string) wire.Envelope {
 	reply := wire.Envelope{Type: "capabilities_result", TaskID: taskID}
-	payload, err := capability.Encode([]capability.Status{desktop.Capability()})
+	payload, err := capability.Encode([]capability.Status{desktop.Capability(), {ID: capability.AsyncTask, Supported: true, Available: true}})
 	if err != nil {
 		reply.Error = err.Error()
 		return reply
@@ -168,7 +172,7 @@ func session(parent context.Context, url, id, token string) error {
 	}
 	defer c.CloseNow()
 	c.SetReadLimit(wire.MaxFrame)
-	capabilities, err := capability.Encode([]capability.Status{desktop.Capability()})
+	capabilities, err := capability.Encode([]capability.Status{desktop.Capability(), {ID: capability.AsyncTask, Supported: true, Available: true}})
 	if err != nil {
 		return fmt.Errorf("collect device capabilities: %w", err)
 	}
@@ -218,7 +222,7 @@ func session(parent context.Context, url, id, token string) error {
 		if err != nil {
 			return err
 		}
-		if f.Type != "execute" && f.Type != "capture_screen" && f.Type != "get_capabilities" && !strings.HasPrefix(f.Type, "file_") {
+		if f.Type != "execute" && f.Type != "execute_task" && f.Type != "capture_screen" && f.Type != "get_capabilities" && !strings.HasPrefix(f.Type, "file_") {
 			continue
 		}
 		select {

@@ -17,7 +17,7 @@ func TestCapabilityResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(statuses) != 1 || statuses[0].ID != capability.DesktopCapture {
+	if len(statuses) != 2 || statuses[0].ID != capability.DesktopCapture || statuses[1].ID != capability.AsyncTask || !statuses[1].Available {
 		t.Fatalf("missing desktop capability %+v", statuses)
 	}
 	if statuses[0] != desktop.Capability() {
