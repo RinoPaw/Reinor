@@ -56,3 +56,22 @@ The script holds an exclusive update lock, verifies the staged file twice, retai
 - Support a bounded, protected cleanup policy for older binary backups and detect stale locks after interruption.
 
 Keep the existing SSH maintenance channel available throughout all deployments. See `docs/remote-operations.md` for recovery and key revocation.
+
+## Android ARM64 executable updates
+
+Use the Android CLI update command with an independently verified SHA-256
+from the matching GitHub Release and a local artifact or HTTPS asset URL.
+
+```sh
+reinor update -file /path/to/reinor-android-arm64 -sha256 VERIFIED_SHA256 -dry-run
+reinor update -file /path/to/reinor-android-arm64 -sha256 VERIFIED_SHA256
+reinor update -rollback -sha256 PREVIOUS_VERIFIED_SHA256
+```
+
+The command accepts exactly one of -file or -url for installation. The previous
+executable is retained as .previous. Enrollment credentials are unchanged.
+Restart the process separately to activate an installed update. If the new
+executable cannot start, restore the verified previous binary from another
+Termux shell. A stale update lock may be removed after confirming no update
+is running. Unattended updates and automatic health-check rollback are not
+implemented.

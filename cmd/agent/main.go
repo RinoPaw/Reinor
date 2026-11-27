@@ -253,6 +253,12 @@ func session(parent context.Context, url, id, token string) error {
 	}
 }
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "update" {
+		if err := updateMain(os.Args[2:]); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "join" {
 		if err := joinMain(os.Args[2:]); err != nil {
 			log.Fatal(err)
