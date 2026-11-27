@@ -54,7 +54,11 @@ func joinFile(device string) (string, error) {
 		}
 		base = filepath.Join(base, ".config")
 	}
-	return filepath.Join(base, "RinoMesh", "joined-"+device+".json"), nil
+	dir := "RinoMesh"
+	if runtime.GOOS == "windows" {
+		dir = "Reinor"
+	}
+	return filepath.Join(base, dir, "joined-"+device+".json"), nil
 }
 func validLocalDeviceID(value string) bool {
 	if len(value) == 0 || len(value) > 64 {
