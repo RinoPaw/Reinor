@@ -1,77 +1,83 @@
 name: Release
-
-# Only an explicitly pushed version tag publishes a Release. A tag must point
-# to a commit already reachable from main. Ordinary pushes never deploy.
 on:
   push:
-    tags:
-      - 'v*'
-
+    tags: ['v0.*']
 permissions:
   contents: read
-
 jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Check out tagged source
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Require tag commit on main
-        shell: bash
         run: |
-          set -euo pipefail
           git fetch origin main
           git merge-base --is-ancestor HEAD origin/main
-          git describe --exact-match --tags HEAD
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-          cache: true
-
       - name: Test and vet
         run: |
           go test ./...
           go vet ./...
-
-      - name: Build release packages
-        shell: bash
+      - name: Install Android NDK
+        run: sdkmanager "ndk;28.2.13676358"
+      - name: Build current platforms
         run: |
-          set -euo pipefail
-          mkdir -p dist/win64 dist/linux64 dist/linux-arm64
-          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -o dist/win64/reinor-agent.exe ./cmd/agent
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o dist/linux64/reinor-agent ./cmd/agent
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o dist/linux-arm64/reinor-agent ./cmd/agent
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o dist/reinor-gateway-linux-amd64 ./cmd/gateway
-          cp packaging/windows/Start-Temporary-Support.cmd dist/win64/
-          cp packaging/windows/README.txt dist/win64/
-          (cd dist/win64 && zip -q ../reinor-agent-windows-amd64.zip reinor-agent.exe Start-Temporary-Support.cmd README.txt)
-          tar -C dist/linux64 -czf dist/reinor-agent-linux-amd64.tar.gz reinor-agent
-          tar -C dist/linux-arm64 -czf dist/reinor-agent-linux-arm64.tar.gz reinor-agent
-          (cd dist && sha256sum reinor-agent-windows-amd64.zip reinor-agent-linux-amd64.tar.gz reinor-agent-linux-arm64.tar.gz reinor-gateway-linux-amd64 > SHA256SUMS)
-          cat dist/SHA256SUMS
-
-      - name: Publish versioned GitHub Release
+          set -eu
+          mkdir -p dist
+          export CGO_ENABLED=0
+          GOOS=windows GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o dist/reinor-windows-amd64.exe ./cmd/agent
+          GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o dist/reinor-linux-amd64 ./cmd/agent
+          GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o dist/reinor-darwin-amd64 ./cmd/agent
+          GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o dist/reinor-darwin-arm64 ./cmd/agent
+          CGO_ENABLED=1 GOOS=android GOARCH=arm64 CC="$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang" go build -trimpath -ldflags='-s -w' -o dist/reinor-android-arm64 ./cmd/agent
+      - uses: actions/checkout@v4
+        with:
+          ref: e2b363428810ee78bb8a239ab1e37ba0b2f025a0
+          path: win7-source
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.20.14'
+          cache-dependency-path: win7-source/go.win7.sum
+      - name: Build Windows 7
+        working-directory: win7-source
+        run: |
+          go test -modfile=go.win7.mod ./cmd/agent ./internal/wire
+          go vet -modfile=go.win7.mod ./cmd/agent ./internal/wire
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 GOAMD64=v1 go build -modfile=go.win7.mod -trimpath -ldflags='-s -w' -o ../dist/reinor-win7-amd64.exe ./cmd/agent
+          CGO_ENABLED=0 GOOS=windows GOARCH=386 go build -modfile=go.win7.mod -trimpath -ldflags='-s -w' -o ../dist/reinor-win7-386.exe ./cmd/agent
+      - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          extra_args=()
-          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
-            extra_args+=(--prerelease)
-          fi
-          gh release create "$GITHUB_REF_NAME" \
-            dist/reinor-agent-windows-amd64.zip \
-            dist/reinor-agent-linux-amd64.tar.gz \
-            dist/reinor-agent-linux-arm64.tar.gz \
-            dist/reinor-gateway-linux-amd64 \
-            dist/SHA256SUMS \
-            --repo "$GITHUB_REPOSITORY" \
-            --verify-tag --generate-notes "${extra_args[@]}"
+          cd dist
+          files=(reinor-windows-amd64.exe reinor-win7-amd64.exe reinor-win7-386.exe reinor-linux-amd64 reinor-darwin-amd64 reinor-darwin-arm64 reinor-android-arm64)
+          sha256sum "${files[@]}" > SHA256SUMS
+          cat > release-notes.md <<'NOTES'
+          ## Windows
+          - `reinor-windows-amd64.exe`: Windows 10/11 x64
+          - `reinor-win7-amd64.exe`: Windows 7 x64
+          - `reinor-win7-386.exe`: Windows 7 x86
+
+          ## Linux
+          - `reinor-linux-amd64`: Linux x86-64
+
+          ## macOS
+          - `reinor-darwin-amd64`: Intel Mac
+          - `reinor-darwin-arm64`: Apple Silicon Mac
+
+          ## Android
+          - `reinor-android-arm64`: Android ARM64 (Termux)
+
+          All binaries are built in GitHub Actions with stripped debug information. Windows 7 uses Go 1.20.14 and compatibility revision `e2b3634`; other builds use the tagged source. Verify with `SHA256SUMS`.
+          NOTES
+          extra=()
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then extra+=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" "${files[@]}" SHA256SUMS --repo "$GITHUB_REPOSITORY" --verify-tag --title "$GITHUB_REF_NAME" --notes-file release-notes.md "${extra[@]}"
