@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/RinoPaw/Reinor/internal/operation"
 	"github.com/RinoPaw/Reinor/internal/wire"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -106,8 +107,8 @@ func (h *hub) fileRequest(ctx context.Context, deviceID string, frame wire.Envel
 	}
 }
 
-func registerFileTools(m *mcp.Server, h *hub) {
-	mcp.AddTool(m, &mcp.Tool{Name: "begin_upload", Description: "Begin an owner-authorized binary upload to a device. No overwrite. Returns a transfer ID; use upload_chunk then finish_upload."},
+func registerFileTools(m *mcp.Server, h *hub, reg *operation.Registry) {
+	operation.Register(reg, m, operation.Spec{Name: "file.begin_upload", Effect: operation.Action, Version: "1", Requires: []string{"online", "file-v1"}}, &mcp.Tool{Name: "begin_upload", Description: "Begin an owner-authorized binary upload to a device. No overwrite. Returns a transfer ID; use upload_chunk then finish_upload."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, args fileStartArgs) (*mcp.CallToolResult, any, error) {
 			id, err := newRequestID()
 			if err != nil {
@@ -121,7 +122,7 @@ func registerFileTools(m *mcp.Server, h *hub) {
 			}
 			return result(map[string]any{"transfer_id": r.TransferID, "path": r.Path, "size": r.Size, "chunk_bytes": maxFileChunk}, false), nil, nil
 		})
-	mcp.AddTool(m, &mcp.Tool{Name: "upload_chunk", Description: "Append up to 128 KiB of base64-decoded binary data to an upload. Repeated matching chunks are safe to retry."},
+	operation.Register(reg, m, operation.Spec{Name: "file.upload_chunk", Effect: operation.Action, Version: "1", Requires: []string{"online", "file-v1"}}, &mcp.Tool{Name: "upload_chunk", Description: "Append up to 128 KiB of base64-decoded binary data to an upload. Repeated matching chunks are safe to retry."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, args fileChunkArgs) (*mcp.CallToolResult, any, error) {
 			if len(args.DataBase64) > base64.StdEncoding.EncodedLen(maxFileChunk) {
 				return result(map[string]string{"error": "encoded chunk exceeds limit"}, true), nil, nil
@@ -136,7 +137,7 @@ func registerFileTools(m *mcp.Server, h *hub) {
 			}
 			return result(map[string]any{"transfer_id": r.TransferID, "next_offset": r.Offset, "size": r.Size}, false), nil, nil
 		})
-	mcp.AddTool(m, &mcp.Tool{Name: "finish_upload", Description: "Verify complete SHA-256 and atomically publish an uploaded file without overwriting an existing path."},
+	operation.Register(reg, m, operation.Spec{Name: "file.finish_upload", Effect: operation.Action, Version: "1", Requires: []string{"online", "file-v1"}}, &mcp.Tool{Name: "finish_upload", Description: "Verify complete SHA-256 and atomically publish an uploaded file without overwriting an existing path."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, args fileTransferArgs) (*mcp.CallToolResult, any, error) {
 			r, err := h.fileRequest(ctx, args.DeviceID, wire.Envelope{Type: "file_finish", TransferID: args.TransferID})
 			if err != nil {
@@ -144,7 +145,7 @@ func registerFileTools(m *mcp.Server, h *hub) {
 			}
 			return result(map[string]any{"path": r.Path, "size": r.Size, "sha256": r.SHA256}, false), nil, nil
 		})
-	mcp.AddTool(m, &mcp.Tool{Name: "abort_upload", Description: "Discard an incomplete staged upload and its temporary file."},
+	operation.Register(reg, m, operation.Spec{Name: "file.abort_upload", Effect: operation.Action, Version: "1", Requires: []string{"online", "file-v1"}}, &mcp.Tool{Name: "abort_upload", Description: "Discard an incomplete staged upload and its temporary file."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, args fileTransferArgs) (*mcp.CallToolResult, any, error) {
 			_, err := h.fileRequest(ctx, args.DeviceID, wire.Envelope{Type: "file_abort", TransferID: args.TransferID})
 			if err != nil {
@@ -152,7 +153,7 @@ func registerFileTools(m *mcp.Server, h *hub) {
 			}
 			return result(map[string]bool{"aborted": true}, false), nil, nil
 		})
-	mcp.AddTool(m, &mcp.Tool{Name: "get_file_info", Description: "Inspect a regular file on an enrolled device and compute its full SHA-256 before download."},
+	operation.Register(reg, m, operation.Spec{Name: "file.info", Effect: operation.Read, Version: "1", Requires: []string{"online", "file-v1"}}, &mcp.Tool{Name: "get_file_info", Description: "Inspect a regular file on an enrolled device and compute its full SHA-256 before download."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, args filePathArgs) (*mcp.CallToolResult, any, error) {
 			r, err := h.fileRequest(ctx, args.DeviceID, wire.Envelope{Type: "file_info", Path: args.Path})
 			if err != nil {
@@ -160,7 +161,7 @@ func registerFileTools(m *mcp.Server, h *hub) {
 			}
 			return result(map[string]any{"size": r.Size, "sha256": r.SHA256}, false), nil, nil
 		})
-	mcp.AddTool(m, &mcp.Tool{Name: "download_chunk", Description: "Read at most 128 KiB from a device file. Returns base64 bytes and each chunk's SHA-256; compare assembled file against get_file_info."},
+	operation.Register(reg, m, operation.Spec{Name: "file.download_chunk", Effect: operation.Action, Version: "1", Requires: []string{"online", "file-v1"}}, &mcp.Tool{Name: "download_chunk", Description: "Read at most 128 KiB from a device file. Returns base64 bytes and each chunk's SHA-256; compare assembled file against get_file_info."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, args fileReadArgs) (*mcp.CallToolResult, any, error) {
 			r, err := h.fileRequest(ctx, args.DeviceID, wire.Envelope{Type: "file_read", Path: args.Path, Offset: args.Offset})
 			if err != nil {

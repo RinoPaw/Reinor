@@ -6,13 +6,14 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/RinoPaw/Reinor/internal/operation"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestExecuteCommandMCPBase64Switch(t *testing.T) {
 	h := newHub()
 	control := mcp.NewServer(&mcp.Implementation{Name: "test-execute", Version: "1"}, nil)
-	registerExecuteTool(control, h)
+	registerExecuteTool(control, h, operation.New(true, nil))
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", mcp.NewStreamableHTTPHandler(
 		func(_ *http.Request) *mcp.Server { return control },
