@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -71,7 +70,10 @@ func TestTemporaryJoinDoesNotPersistOrReconnect(t *testing.T) {
 	if got := sessions.Load(); got != 1 {
 		t.Fatalf("session dial count = %d, want one", got)
 	}
-	path := filepath.Join(dir, "RinoMesh", "joined-"+device+".json")
+	path, err := joinFile(device)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("temporary credentials persisted: %v", err)
 	}
