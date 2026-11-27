@@ -70,3 +70,54 @@ func TestAgentExecuteDeadlineUnix(t *testing.T) {
 		t.Fatal("deadline took too long")
 	}
 }
+
+func TestAsyncTaskExecutionBeyondLegacyDeadline(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX sleep regression runs on Linux CI")
+	}
+	got := execute(wire.Envelope{Type: "execute_task", Command: "sleep 21; echo finished", TimeoutMS: 30000})
+	if got.ExitCode != 0 || got.Error != "" || !strings.Contains(string(got.Stdout), "finished") {
+		t.Fatalf("long task did not finish: %+v", got)
+	}
+}
+
+func TestAgentTaskLiveOutputAndCancel(t *testing.T) {
+	command := "echo started; exec sleep 30"
+	if runtime.GOOS == "windows" {
+		command = "Write-Output started; Start-Sleep -Seconds 30"
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	progress := make(chan wire.Envelope, 8)
+	done := make(chan wire.Envelope, 1)
+	go func() {
+		done <- executeWithProgress(ctx, wire.Envelope{Type: "execute_task", TaskID: "test", Command: command, TimeoutMS: 30000}, func(v wire.Envelope) error { progress <- v; return nil })
+	}()
+	timer := time.NewTimer(10 * time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case v := <-progress:
+			if v.Type != "task_progress" || v.TaskID != "test" {
+				t.Fatalf("unexpected progress %+v", v)
+			}
+			if !strings.Contains(string(v.Stdout), "started") {
+				continue
+			}
+			cancel()
+			select {
+			case result := <-done:
+				if result.Error != "task cancelled" || !strings.Contains(string(result.Stdout), "started") {
+					t.Fatalf("unexpected result %+v", result)
+				}
+				return
+			case <-timer.C:
+				t.Fatal("cancellation did not stop direct process")
+			}
+		case result := <-done:
+			t.Fatalf("finished before progress: %+v", result)
+		case <-timer.C:
+			t.Fatal("live output not received")
+		}
+	}
+}

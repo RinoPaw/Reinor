@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/RinoPaw/Reinor/internal/capability"
@@ -35,11 +36,14 @@ func getToken(path string) string {
 }
 
 type limitedBuffer struct {
+	mu  sync.Mutex
 	b   bytes.Buffer
 	max int
 }
 
 func (l *limitedBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	n := len(p)
 	space := l.max - l.b.Len()
 	if space > 0 {
@@ -49,6 +53,11 @@ func (l *limitedBuffer) Write(p []byte) (int, error) {
 		_, _ = l.b.Write(p[:space])
 	}
 	return n, nil
+}
+func (l *limitedBuffer) snapshot() []byte {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return bytes.Clone(l.b.Bytes())
 }
 func exitCode(err error) int32 {
 	if err == nil {
@@ -87,29 +96,79 @@ func agentShellCommand(ctx context.Context, command string) *exec.Cmd {
 func execute(f wire.Envelope) wire.Envelope { return executeWithContext(context.Background(), f) }
 
 func executeWithContext(parent context.Context, f wire.Envelope) wire.Envelope {
+	return executeWithProgress(parent, f, nil)
+}
+func executeWithProgress(parent context.Context, f wire.Envelope, progress func(wire.Envelope) error) wire.Envelope {
 	reply := wire.Envelope{Type: "result", TaskID: f.TaskID}
 	if len(f.Command) == 0 || len(f.Command) > 4096 {
 		reply.Error = "invalid command"
 		return reply
 	}
 	ms := f.TimeoutMS
-	if ms < 1000 || ms > 20000 {
+	maxMS := uint32(20000)
+	if f.Type == "execute_task" {
+		maxMS = 3600000
+	}
+	if ms < 1000 || ms > maxMS {
 		ms = 20000
 	}
 	ctx, cancel := context.WithTimeout(parent, time.Duration(ms)*time.Millisecond)
 	defer cancel()
 	cmd := agentShellCommand(ctx, f.Command)
 	cmd.WaitDelay = 2 * time.Second
+	var killed atomic.Bool
+	kill := cmd.Cancel
+	cmd.Cancel = func() error {
+		err := kill()
+		if err == nil {
+			killed.Store(true)
+		}
+		return err
+	}
 	var out, errout limitedBuffer
 	out.max = 65536
 	errout.max = 65536
 	cmd.Stdout = &out
 	cmd.Stderr = &errout
-	err := cmd.Run()
+	err := cmd.Start()
+	started := err == nil
+	if started {
+		if progress == nil || f.Type != "execute_task" {
+			err = cmd.Wait()
+		} else {
+			done := make(chan struct{})
+			stopped := make(chan struct{})
+			go func() {
+				defer close(stopped)
+				tick := time.NewTicker(time.Second)
+				defer tick.Stop()
+				lastOut, lastErr := -1, -1
+				for {
+					stdout, stderr := out.snapshot(), errout.snapshot()
+					if len(stdout) != lastOut || len(stderr) != lastErr {
+						if progress(wire.Envelope{Type: "task_progress", TaskID: f.TaskID, Stdout: stdout, Stderr: stderr}) != nil {
+							return
+						}
+						lastOut, lastErr = len(stdout), len(stderr)
+					}
+					select {
+					case <-done:
+						return
+					case <-tick.C:
+					}
+				}
+			}()
+			err = cmd.Wait()
+			close(done)
+			<-stopped
+		}
+	}
 	reply.ExitCode = exitCode(err)
-	reply.Stdout = out.b.Bytes()
-	reply.Stderr = errout.b.Bytes()
-	if ctx.Err() != nil {
+	reply.Stdout = out.snapshot()
+	reply.Stderr = errout.snapshot()
+	if err != nil && errors.Is(ctx.Err(), context.Canceled) && f.Type == "execute_task" && (killed.Load() || !started) {
+		reply.Error = "task cancelled"
+	} else if errors.Is(ctx.Err(), context.DeadlineExceeded) && (f.Type != "execute_task" || err != nil) {
 		reply.Error = "execution deadline exceeded"
 	} else if err != nil && reply.ExitCode == -1 {
 		reply.Error = fmt.Sprintf("launch failed: %v", err)
@@ -118,7 +177,7 @@ func executeWithContext(parent context.Context, f wire.Envelope) wire.Envelope {
 }
 func capabilitySnapshot(taskID string) wire.Envelope {
 	reply := wire.Envelope{Type: "capabilities_result", TaskID: taskID}
-	payload, err := capability.Encode([]capability.Status{desktop.Capability(), {ID: capability.FileV2, Supported: true, Available: true}})
+	payload, err := capability.Encode([]capability.Status{desktop.Capability(), {ID: capability.FileV2, Supported: true, Available: true}, {ID: capability.AsyncTask, Supported: true, Available: true}})
 	if err != nil {
 		reply.Error = err.Error()
 		return reply
@@ -168,7 +227,7 @@ func session(parent context.Context, url, id, token string) error {
 	}
 	defer c.CloseNow()
 	c.SetReadLimit(wire.MaxFrame)
-	capabilities, err := capability.Encode([]capability.Status{desktop.Capability(), {ID: capability.FileV2, Supported: true, Available: true}})
+	capabilities, err := capability.Encode([]capability.Status{desktop.Capability(), {ID: capability.FileV2, Supported: true, Available: true}, {ID: capability.AsyncTask, Supported: true, Available: true}})
 	if err != nil {
 		return fmt.Errorf("collect device capabilities: %w", err)
 	}
@@ -183,6 +242,9 @@ func session(parent context.Context, url, id, token string) error {
 	var streamMu sync.Mutex
 	var streamID string
 	var streamCancel context.CancelFunc
+	var taskMu sync.Mutex
+	var activeTaskID string
+	var activeTaskCancel context.CancelFunc
 	files := newFileTransfers()
 	defer files.closeAll()
 	connection, closeConn := context.WithCancel(parent)
@@ -221,6 +283,14 @@ func session(parent context.Context, url, id, token string) error {
 		f, err := wire.Unmarshal(data)
 		if err != nil {
 			return err
+		}
+		if f.Type == "cancel_task" {
+			taskMu.Lock()
+			if activeTaskID == f.TaskID && activeTaskCancel != nil {
+				activeTaskCancel()
+			}
+			taskMu.Unlock()
+			continue
 		}
 		if f.Type == "file_v2_cancel" {
 			streamMu.Lock()
@@ -264,13 +334,31 @@ func session(parent context.Context, url, id, token string) error {
 			}
 			continue
 		}
-		if f.Type != "execute" && f.Type != "capture_screen" && f.Type != "get_capabilities" && !strings.HasPrefix(f.Type, "file_") {
+		if f.Type != "execute" && f.Type != "execute_task" && f.Type != "capture_screen" && f.Type != "get_capabilities" && !strings.HasPrefix(f.Type, "file_") {
 			continue
 		}
 		select {
 		case busy <- struct{}{}:
-			go func(f wire.Envelope) {
-				defer func() { <-busy }()
+			execCtx := connection
+			stopTask := func() {}
+			if f.Type == "execute_task" {
+				execCtx, stopTask = context.WithCancel(connection)
+				taskMu.Lock()
+				activeTaskID = f.TaskID
+				activeTaskCancel = stopTask
+				taskMu.Unlock()
+			}
+			go func(f wire.Envelope, execCtx context.Context, stopTask context.CancelFunc) {
+				defer func() {
+					if f.Type == "execute_task" {
+						stopTask()
+						taskMu.Lock()
+						activeTaskID = ""
+						activeTaskCancel = nil
+						taskMu.Unlock()
+					}
+					<-busy
+				}()
 				var reply wire.Envelope
 				switch f.Type {
 				case "capture_screen":
@@ -281,14 +369,14 @@ func session(parent context.Context, url, id, token string) error {
 					if strings.HasPrefix(f.Type, "file_") {
 						reply = files.handle(f)
 					} else {
-						reply = executeWithContext(connection, f)
+						reply = executeWithProgress(execCtx, f, send)
 					}
 				}
 				if err := send(reply); err != nil {
 					log.Printf("send result: %v", err)
 					_ = c.CloseNow()
 				}
-			}(f)
+			}(f, execCtx, stopTask)
 		default:
 			kind := "result"
 			if strings.HasPrefix(f.Type, "file_") {

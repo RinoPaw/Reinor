@@ -21,6 +21,7 @@ import (
 	"github.com/RinoPaw/Reinor/internal/capability"
 	"github.com/RinoPaw/Reinor/internal/oauthlocal"
 	"github.com/RinoPaw/Reinor/internal/operation"
+	"github.com/RinoPaw/Reinor/internal/task"
 	"github.com/RinoPaw/Reinor/internal/wire"
 	"github.com/coder/websocket"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -87,8 +88,9 @@ func (a *agent) reserve() bool {
 func (a *agent) release() { a.busyMu.Lock(); a.busy = false; a.busyMu.Unlock() }
 
 type pending struct {
-	agent *agent
-	ch    chan wire.Envelope
+	agent    *agent
+	ch       chan wire.Envelope
+	progress chan wire.Envelope
 }
 type hub struct {
 	mu      sync.Mutex
@@ -171,6 +173,15 @@ func (h *hub) completed(a *agent, v wire.Envelope) {
 	p, ok := h.pending[v.TaskID]
 	h.mu.Unlock()
 	if ok && p.agent == a {
+		if v.Type == "task_progress" {
+			if p.progress != nil {
+				select {
+				case p.progress <- v:
+				default:
+				}
+			}
+			return
+		}
 		select {
 		case p.ch <- v:
 		default:
@@ -233,10 +244,17 @@ func (h *hub) capture(ctx context.Context, deviceID string, maxWidth, quality ui
 }
 
 func (h *hub) dispatch(ctx context.Context, deviceID string, request wire.Envelope, timeout time.Duration) (wire.Envelope, error) {
+	return h.dispatchTarget(ctx, deviceID, request, timeout, nil, nil, nil)
+}
+func (h *hub) dispatchTarget(ctx context.Context, deviceID string, request wire.Envelope, timeout time.Duration, expected *agent, cancelTask <-chan struct{}, onProgress func(wire.Envelope)) (wire.Envelope, error) {
 	if !validDeviceID.MatchString(deviceID) {
 		return wire.Envelope{}, errors.New("invalid device_id")
 	}
-	if timeout <= 0 || timeout > 20*time.Second {
+	maxTimeout := 20 * time.Second
+	if request.Type == "execute_task" {
+		maxTimeout = time.Hour
+	}
+	if timeout <= 0 || timeout > maxTimeout {
 		timeout = 20 * time.Second
 	}
 	h.mu.Lock()
@@ -249,6 +267,9 @@ func (h *hub) dispatch(ctx context.Context, deviceID string, request wire.Envelo
 	h.mu.Unlock()
 	if a == nil {
 		return wire.Envelope{}, errors.New("device offline")
+	}
+	if expected != nil && a != expected {
+		return wire.Envelope{}, errors.New("device connection changed before dispatch")
 	}
 	h.mu.Lock()
 	disallowed := a.revoked || (a.temporaryID != "" && !time.Now().Before(a.temporaryExpiresAt))
@@ -267,16 +288,28 @@ func (h *hub) dispatch(ctx context.Context, deviceID string, request wire.Envelo
 		return wire.Envelope{}, errors.New("device busy")
 	}
 	defer a.release()
-	buf := make([]byte, 16)
-	if _, err := rand.Read(buf); err != nil {
-		return wire.Envelope{}, err
+	id := request.TaskID
+	if id == "" {
+		buf := make([]byte, 16)
+		if _, err := rand.Read(buf); err != nil {
+			return wire.Envelope{}, err
+		}
+		id = hex.EncodeToString(buf)
 	}
-	id := hex.EncodeToString(buf)
 	response := make(chan wire.Envelope, 1)
+	var progress chan wire.Envelope
+	if onProgress != nil {
+		progress = make(chan wire.Envelope, 1)
+	}
 	h.mu.Lock()
-	h.pending[id] = pending{agent: a, ch: response}
+	h.pending[id] = pending{agent: a, ch: response, progress: progress}
 	h.mu.Unlock()
 	defer func() { h.mu.Lock(); delete(h.pending, id); h.mu.Unlock() }()
+	select {
+	case <-cancelTask:
+		return wire.Envelope{}, errTaskCancelledBeforeDispatch
+	default:
+	}
 	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	request.TaskID = id
 	request.TimeoutMS = uint32(timeout.Milliseconds())
@@ -287,13 +320,32 @@ func (h *hub) dispatch(ctx context.Context, deviceID string, request wire.Envelo
 	}
 	timer := time.NewTimer(timeout + 5*time.Second)
 	defer timer.Stop()
-	select {
-	case r := <-response:
-		return r, nil
-	case <-timer.C:
-		return wire.Envelope{}, errors.New("execution timed out; status unknown")
-	case <-ctx.Done():
-		return wire.Envelope{}, fmt.Errorf("request canceled; execution status unknown: %w", ctx.Err())
+	for {
+		select {
+		case r := <-response:
+			if progress != nil {
+				select {
+				case v := <-progress:
+					onProgress(v)
+				default:
+				}
+			}
+			return r, nil
+		case v := <-progress:
+			onProgress(v)
+		case <-cancelTask:
+			cancelTask = nil
+			cancelCtx, stop := context.WithTimeout(ctx, 5*time.Second)
+			err := a.send(cancelCtx, wire.Envelope{Type: "cancel_task", TaskID: id})
+			stop()
+			if err != nil {
+				return wire.Envelope{}, fmt.Errorf("cancel delivery failed; execution status unknown: %w", err)
+			}
+		case <-timer.C:
+			return wire.Envelope{}, errors.New("execution timed out; status unknown")
+		case <-ctx.Done():
+			return wire.Envelope{}, fmt.Errorf("request canceled; execution status unknown: %w", ctx.Err())
+		}
 	}
 }
 func (h *hub) serveAgent(w http.ResponseWriter, r *http.Request, token string, joins *joinStore) {
@@ -388,7 +440,7 @@ func (h *hub) serveAgent(w http.ResponseWriter, r *http.Request, token string, j
 		if err != nil {
 			return
 		}
-		if frame.Type == "result" || frame.Type == "capture_result" || frame.Type == "capabilities_result" || frame.Type == "file_result" {
+		if frame.Type == "result" || frame.Type == "capture_result" || frame.Type == "capabilities_result" || frame.Type == "file_result" || frame.Type == "task_progress" {
 			h.completed(a, frame)
 		}
 	}
@@ -526,6 +578,11 @@ func main() {
 	}
 	registerJoinTools(m, joins, h, reg)
 	registerFileTools(m, h, reg)
+	tasks, err := task.Open(joinDB + ".tasks")
+	if err != nil {
+		log.Fatalf("open task store: %v", err)
+	}
+	registerTaskTools(m, h, tasks, reg)
 	mux := http.NewServeMux()
 	if err := installV2(m, h, mux, os.Getenv("REINOR_PUBLIC_ORIGIN"), joinDB+".transfers", reg); err != nil {
 		log.Fatalf("initialize file v2: %v", err)
