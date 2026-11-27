@@ -24,8 +24,11 @@ jobs:
         run: |
           go test ./...
           go vet ./...
-      - name: Install Android NDK
-        run: sdkmanager "ndk;28.2.13676358"
+      - name: Set up Android SDK and NDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: ndk;28.2.13676358
+          accept-android-sdk-licenses: true
       - name: Build current platforms
         run: |
           set -eu
