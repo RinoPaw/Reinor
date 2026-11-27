@@ -17,6 +17,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+var errTaskCancelledBeforeDispatch = errors.New("task cancelled before dispatch")
+
 type submitTaskArgs struct {
 	execArgs
 	TimeoutSeconds int `json:"timeout_seconds,omitempty" jsonschema:"Execution deadline in seconds (1-3600; default 300)"`
@@ -84,7 +86,15 @@ func runTask(h *hub, s *task.Store, a *agent, r task.Record, cmd string) {
 	if !update(task.Dispatched, nil, "", "", "") {
 		return
 	}
-	reply, err := h.dispatchTarget(context.Background(), r.DeviceID, wire.Envelope{Type: "execute_task", Command: cmd, TaskID: r.ID}, time.Duration(r.TimeoutSeconds)*time.Second, a)
+	reply, err := h.dispatchTarget(context.Background(), r.DeviceID, wire.Envelope{Type: "execute_task", Command: cmd, TaskID: r.ID}, time.Duration(r.TimeoutSeconds)*time.Second, a, s.CancelSignal(r.ID), func(v wire.Envelope) {
+		if err := s.UpdateProgress(r.ID, string(v.Stdout), string(v.Stderr)); err != nil {
+			log.Printf("persist task progress %s: %v", r.ID, err)
+		}
+	})
+	if errors.Is(err, errTaskCancelledBeforeDispatch) {
+		update(task.Cancelled, nil, "", "", err.Error())
+		return
+	}
 	if err != nil {
 		update(task.Unknown, nil, "", "", err.Error())
 		return
@@ -98,7 +108,9 @@ func runTask(h *hub, s *task.Store, a *agent, r task.Record, cmd string) {
 		return
 	}
 	status := task.Succeeded
-	if reply.Error == "execution deadline exceeded" {
+	if reply.Error == "task cancelled" {
+		status = task.Cancelled
+	} else if reply.Error == "execution deadline exceeded" {
 		status = task.TimedOut
 	} else if reply.Error != "" || reply.ExitCode != 0 {
 		status = task.Failed
@@ -106,6 +118,13 @@ func runTask(h *hub, s *task.Store, a *agent, r task.Record, cmd string) {
 	update(status, &reply.ExitCode, string(reply.Stdout), string(reply.Stderr), reply.Error)
 }
 func registerTaskTools(m *mcp.Server, h *hub, s *task.Store, reg *operation.Registry) {
+	operation.Register(reg, m, operation.Spec{Name: "task.cancel", Effect: operation.Action, Version: "1"}, &mcp.Tool{Name: "cancel_task", Description: "Request cancellation of an active task. Returns current state; cancellation is confirmed only by task.get. Independently spawned descendants may survive."}, func(_ context.Context, _ *mcp.CallToolRequest, args taskIDArgs) (*mcp.CallToolResult, any, error) {
+		r, err := s.RequestCancel(args.TaskID)
+		if err != nil {
+			return result(map[string]string{"error": err.Error()}, true), nil, nil
+		}
+		return result(r, false), nil, nil
+	})
 	operation.Register(reg, m, operation.Spec{Name: "task.submit", Effect: operation.Action, Version: "1", Requires: []string{"online", capability.AsyncTask}}, &mcp.Tool{Name: "submit_task", Description: "Start a command on an online task-capable device and return a persistent task ID. Does not retry after disconnect. Runs with the Agent account's privileges."}, func(_ context.Context, _ *mcp.CallToolRequest, args submitTaskArgs) (*mcp.CallToolResult, any, error) {
 		r, err := submitTask(h, s, args)
 		if err != nil {
@@ -113,7 +132,7 @@ func registerTaskTools(m *mcp.Server, h *hub, s *task.Store, reg *operation.Regi
 		}
 		return result(r, false), nil, nil
 	})
-	operation.Register(reg, m, operation.Spec{Name: "task.get", Effect: operation.Read, Version: "1"}, &mcp.Tool{Name: "get_task", Description: "Get task status and final bounded stdout/stderr by task ID."}, func(_ context.Context, _ *mcp.CallToolRequest, args taskIDArgs) (*mcp.CallToolResult, any, error) {
+	operation.Register(reg, m, operation.Spec{Name: "task.get", Effect: operation.Read, Version: "1"}, &mcp.Tool{Name: "get_task", Description: "Get task status and bounded stdout/stderr snapshots by task ID, including live output."}, func(_ context.Context, _ *mcp.CallToolRequest, args taskIDArgs) (*mcp.CallToolResult, any, error) {
 		r, ok := s.Get(args.TaskID)
 		if !ok {
 			return result(map[string]string{"error": "task not found"}, true), nil, nil

@@ -16,7 +16,9 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func TestTaskMCPRoundTrip(t *testing.T) {
+func TestTaskMCPRoundTrip(t *testing.T)       { testTaskRoundTrip(t, false) }
+func TestTaskCancelMCPRoundTrip(t *testing.T) { testTaskRoundTrip(t, true) }
+func testTaskRoundTrip(t *testing.T, cancelTask bool) {
 	h := newHub()
 	store, err := task.Open(t.TempDir())
 	if err != nil {
@@ -65,14 +67,52 @@ func TestTaskMCPRoundTrip(t *testing.T) {
 	if f.Type != "execute_task" || f.TimeoutMS != 300000 || f.TaskID != id || f.Command != "echo hello" {
 		t.Fatalf("request: %+v", f)
 	}
-	reply, _ := wire.Marshal(wire.Envelope{Type: "result", TaskID: id, Stdout: []byte("hello")})
+	progress, _ := wire.Marshal(wire.Envelope{Type: "task_progress", TaskID: id, Stdout: []byte("hel")})
+	if err = c.Write(ctx, websocket.MessageBinary, progress); err != nil {
+		t.Fatal(err)
+	}
+	for ctx.Err() == nil {
+		r, _ := store.Get(id)
+		if r.Status == task.Running && r.Stdout == "hel" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if ctx.Err() != nil {
+		t.Fatal("live progress not persisted")
+	}
+	expected := task.Succeeded
+	replyError := ""
+	if cancelTask {
+		op := reg.Discover(operation.DiscoverArgs{Operation: "task.cancel"})[0]
+		call := map[string]any{"operation": op.Name, "revision": op.Revision, "arguments": map[string]any{"task_id": id}}
+		out := testJoinMCP(t, server.URL+"/mcp", "invoke", call)
+		if out["cancel_requested"] != true || out["status"] != "running" {
+			t.Fatalf("cancel request: %v", out)
+		}
+		out = testJoinMCP(t, server.URL+"/mcp", "invoke", call)
+		if out["cancel_requested"] != true {
+			t.Fatalf("repeat cancellation: %v", out)
+		}
+		_, data, err := c.Read(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		frame, err := wire.Unmarshal(data)
+		if err != nil || frame.Type != "cancel_task" || frame.TaskID != id {
+			t.Fatalf("cancel frame: %+v %v", frame, err)
+		}
+		expected = task.Cancelled
+		replyError = "task cancelled"
+	}
+	reply, _ := wire.Marshal(wire.Envelope{Type: "result", TaskID: id, Stdout: []byte("hello"), Error: replyError})
 	if err = c.Write(ctx, websocket.MessageBinary, reply); err != nil {
 		t.Fatal(err)
 	}
 	for ctx.Err() == nil {
 		r, _ := store.Get(id)
 		if !r.Status.Active() {
-			if r.Status != task.Succeeded || r.Stdout != "hello" {
+			if r.Status != expected || r.Stdout != "hello" || r.CancelRequested != cancelTask {
 				t.Fatalf("result: %+v", r)
 			}
 			get := reg.Discover(operation.DiscoverArgs{Operation: "task.get"})[0]

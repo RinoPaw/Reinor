@@ -55,3 +55,45 @@ func TestLifecycle(t *testing.T) {
 		t.Fatalf("%+v", r)
 	}
 }
+
+func TestProgressAndCancelSurviveRestart(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := strings.Repeat("d", 32)
+	if err = s.Begin(Record{ID: id, DeviceID: "pc", TimeoutSeconds: 300}); err != nil {
+		t.Fatal(err)
+	}
+	signal := s.CancelSignal(id)
+	if err = s.Update(id, Dispatched, nil, "", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.UpdateProgress(id, "first", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.UpdateProgress(id, "", ""); err == nil {
+		t.Fatal("regressing output accepted")
+	}
+	r, err := s.RequestCancel(id)
+	if err != nil || !r.CancelRequested || r.Status != Running {
+		t.Fatalf("cancel: %+v %v", r, err)
+	}
+	select {
+	case <-signal:
+	default:
+		t.Fatal("cancel signal not closed")
+	}
+	if _, err = s.RequestCancel(id); err != nil {
+		t.Fatal(err)
+	}
+	s, err = Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, ok := s.Get(id)
+	if !ok || r.Status != Unknown || r.Stdout != "first" || !r.CancelRequested {
+		t.Fatalf("restart: %+v", r)
+	}
+}
