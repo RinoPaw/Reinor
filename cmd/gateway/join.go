@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"context"
+	"github.com/RinoPaw/Reinor/internal/operation"
 	"github.com/RinoPaw/Reinor/internal/wire"
 	"github.com/coder/websocket"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -405,19 +406,19 @@ type joinAction struct {
 	RequestID string `json:"request_id" jsonschema:"Join request identifier"`
 }
 
-func registerJoinTools(server *mcp.Server, s *joinStore, h *hub) {
+func registerJoinTools(server *mcp.Server, s *joinStore, h *hub, reg *operation.Registry) {
 	listHandler := func(_ context.Context, _ *mcp.CallToolRequest, _ noArgs) (*mcp.CallToolResult, any, error) {
 		return result(s.list(), false), nil, nil
 	}
-	mcp.AddTool(server, &mcp.Tool{Name: "list_join_requests", Description: "List pending and decided device connection requests."}, listHandler)
-	mcp.AddTool(server, &mcp.Tool{Name: "approve_join_request", Description: "Approve a pending device request. The PC can then connect to Gateway."}, func(_ context.Context, _ *mcp.CallToolRequest, args joinAction) (*mcp.CallToolResult, any, error) {
+	operation.Register(reg, server, operation.Spec{Name: "enrollment.list", Effect: operation.Read, Version: "1"}, &mcp.Tool{Name: "list_join_requests", Description: "List pending and decided device connection requests."}, listHandler)
+	operation.Register(reg, server, operation.Spec{Name: "enrollment.approve", Effect: operation.Action, Version: "1"}, &mcp.Tool{Name: "approve_join_request", Description: "Approve a pending device request. The PC can then connect to Gateway."}, func(_ context.Context, _ *mcp.CallToolRequest, args joinAction) (*mcp.CallToolResult, any, error) {
 		rec, err := s.decide(args.RequestID, true)
 		if err != nil {
 			return result(map[string]string{"error": err.Error()}, true), nil, nil
 		}
 		return result(map[string]string{"request_id": rec.ID, "device_id": rec.DeviceID, "state": rec.State}, false), nil, nil
 	})
-	mcp.AddTool(server, &mcp.Tool{Name: "revoke_temporary_session", Description: "Immediately revoke a temporary support session by request ID, disconnect its Agent, and invalidate its ticket."}, func(_ context.Context, _ *mcp.CallToolRequest, args joinAction) (*mcp.CallToolResult, any, error) {
+	operation.Register(reg, server, operation.Spec{Name: "enrollment.revoke", Effect: operation.Action, Version: "1"}, &mcp.Tool{Name: "revoke_temporary_session", Description: "Immediately revoke a temporary support session by request ID, disconnect its Agent, and invalidate its ticket."}, func(_ context.Context, _ *mcp.CallToolRequest, args joinAction) (*mcp.CallToolResult, any, error) {
 		rec, err := s.revokeTemporary(args.RequestID)
 		if err != nil {
 			return result(map[string]string{"error": err.Error()}, true), nil, nil
@@ -425,7 +426,7 @@ func registerJoinTools(server *mcp.Server, s *joinStore, h *hub) {
 		h.dropTemporary(rec.ID)
 		return result(map[string]any{"request_id": rec.ID, "device_id": rec.DeviceID, "state": rec.State}, false), nil, nil
 	})
-	mcp.AddTool(server, &mcp.Tool{Name: "reject_join_request", Description: "Reject a pending request, or revoke an approved temporary session for clients that have not refreshed their tool list."}, func(_ context.Context, _ *mcp.CallToolRequest, args joinAction) (*mcp.CallToolResult, any, error) {
+	operation.Register(reg, server, operation.Spec{Name: "enrollment.reject", Effect: operation.Action, Version: "1"}, &mcp.Tool{Name: "reject_join_request", Description: "Reject a pending request, or revoke an approved temporary session for clients that have not refreshed their tool list."}, func(_ context.Context, _ *mcp.CallToolRequest, args joinAction) (*mcp.CallToolResult, any, error) {
 		rec, err := s.decide(args.RequestID, false)
 		if err != nil {
 			originalErr := err

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/RinoPaw/Reinor/internal/capability"
+	"github.com/RinoPaw/Reinor/internal/operation"
 	"github.com/RinoPaw/Reinor/internal/wire"
 	"github.com/coder/websocket"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -25,7 +26,7 @@ func TestFileV2BinaryRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := mcp.NewServer(&mcp.Implementation{Name: "v2-test", Version: "1"}, nil)
-	registerV2Tools(m, v)
+	registerV2Tools(m, v, operation.New(true, nil))
 	token := strings.Repeat("z", 40)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/agent/ws", func(w http.ResponseWriter, r *http.Request) { h.serveAgent(w, r, token, nil) })

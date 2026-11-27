@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/RinoPaw/Reinor/internal/operation"
 	"github.com/RinoPaw/Reinor/internal/wire"
 	"github.com/coder/websocket"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -69,7 +70,7 @@ func TestSingleGatewayJoinToExecute(t *testing.T) {
 	}
 	h := newHub()
 	control := mcp.NewServer(&mcp.Implementation{Name: "test-control", Version: "1"}, nil)
-	registerJoinTools(control, store, newHub())
+	registerJoinTools(control, store, newHub(), operation.New(true, nil))
 	mux := http.NewServeMux()
 	joinRoutes(mux, store)
 	mux.Handle("/mcp", mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server { return control }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true}))
@@ -174,7 +175,7 @@ func TestJoinThroughExistingWebSocketEndpoint(t *testing.T) {
 	}
 	h := newHub()
 	control := mcp.NewServer(&mcp.Implementation{Name: "test-control", Version: "1"}, nil)
-	registerJoinTools(control, store, newHub())
+	registerJoinTools(control, store, newHub(), operation.New(true, nil))
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server { return control }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true}))
 	mux.HandleFunc("/agent/ws", func(w http.ResponseWriter, r *http.Request) {
