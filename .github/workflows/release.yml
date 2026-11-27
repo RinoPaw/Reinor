@@ -34,6 +34,8 @@ jobs:
           set -eu
           mkdir -p dist
           export CGO_ENABLED=0
+          GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o dist/reinor-gateway-linux-amd64 ./cmd/gateway
+          GOOS=linux GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o dist/reinor-gateway-linux-arm64 ./cmd/gateway
           GOOS=windows GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o dist/reinor-windows-amd64.exe ./cmd/agent
           GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o dist/reinor-linux-amd64 ./cmd/agent
           GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o dist/reinor-darwin-amd64 ./cmd/agent
@@ -61,7 +63,7 @@ jobs:
         run: |
           set -euo pipefail
           cd dist
-          files=(reinor-windows-amd64.exe reinor-win7-amd64.exe reinor-win7-386.exe reinor-linux-amd64 reinor-darwin-amd64 reinor-darwin-arm64 reinor-android-arm64)
+          files=(reinor-windows-amd64.exe reinor-win7-amd64.exe reinor-win7-386.exe reinor-linux-amd64 reinor-darwin-amd64 reinor-darwin-arm64 reinor-android-arm64 reinor-gateway-linux-amd64 reinor-gateway-linux-arm64)
           sha256sum "${files[@]}" > SHA256SUMS
           cat > release-notes.md <<'NOTES'
           ## Windows
@@ -78,6 +80,10 @@ jobs:
 
           ## Android
           - `reinor-android-arm64`: Android ARM64 (Termux)
+
+          ## Gateway (server)
+          - `reinor-gateway-linux-amd64`: Linux x86-64
+          - `reinor-gateway-linux-arm64`: Linux ARM64
 
           All binaries are built in GitHub Actions with stripped debug information. Windows 7 uses Go 1.20.14 and compatibility revision `e2b3634`; other builds use the tagged source. Verify with `SHA256SUMS`.
           NOTES
